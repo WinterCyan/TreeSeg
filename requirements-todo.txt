@@ -1,0 +1,9 @@
+cntk-gpu==2.7
+geopandas==0.7.0
+imgaug==0.4.0
+keyrings.alt==3.0
+opencv-python==4.2.0.34
+pygobject==3.26.1
+pyproj==2.6.0
+python-apt==1.6.4
+rasterio==1.1.3
