@@ -1,7 +1,9 @@
+from contextlib import nullcontext
+from curses.ascii import NUL
 import matplotlib.pyplot as plt  # plotting tools
 from matplotlib.patches import Polygon
 
-def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, save=False):
+def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, save=False, dir=""):
     """Display the given set of images, optionally with titles.
     images: array of image tensors in Batch * Height * Width * Channel format.
     titles: optional. A list of titles to display with each image.
@@ -9,6 +11,7 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
     norm: Optional. A Normalize instance to map values to colors.
     interpolation: Optional. Image interpolation to use for display.
     """
+    print("shape: ", img.shape)
     cols = img.shape[-1]
     rows = img.shape[0]
     titles = titles if titles is not None else [""] * (rows*cols)
@@ -20,5 +23,5 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
             plt.axis('off')
             plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
             if save:
-                plt.imsave(fname=f"../demo{i}{j}.png", arr=img[i,...,j])
+                plt.imsave(fname=f"{dir}/disp/disp{i}{j}.png", arr=img[i,...,j])
 
