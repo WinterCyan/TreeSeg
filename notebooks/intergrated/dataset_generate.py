@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 config = Configuration("full_area2")
 SPLIT_UNIT = 108
+HALF_SPLIT_UNIT = 54
 dataset_dir = "/home/winter/code-resources/treeseg/dataset/"
 TYPE_ENUM = ["ndvi","pan","annotation","weight"]
 
@@ -42,7 +43,12 @@ def cut_area(fn, source_dir, mean_thr=0.1):
             idx = col_split_count*i+j
             square_img = split_col[i][j]
             mean_v = np.mean(square_img[2,:,:])
-            if mean_v>0.1:
+            mean_1 = np.mean(square_img[2,0:HALF_SPLIT_UNIT,0:HALF_SPLIT_UNIT])
+            mean_2 = np.mean(square_img[2,0:HALF_SPLIT_UNIT,HALF_SPLIT_UNIT:])
+            mean_3 = np.mean(square_img[2,HALF_SPLIT_UNIT:,0:HALF_SPLIT_UNIT])
+            mean_4 = np.mean(square_img[2,HALF_SPLIT_UNIT:,HALF_SPLIT_UNIT:])
+            if mean_1>0.05 and mean_2>0.05 and mean_3>0.05 and mean_4>0.05 and mean_v>0.1:
+                print(f"4 means: {mean_1},{mean_2},{mean_3},{mean_4}")
                 for k in range(len(TYPE_ENUM)):
                     plt.imsave(dataset_dir+f"{fn}_{idx}_{TYPE_ENUM[k]}.png",square_img[k])
     plt.show()
