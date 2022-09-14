@@ -6,12 +6,13 @@ class Configuration:
         # Initialize the data related variables used in the notebook
         # For reading the ndvi, pan and annotated images generated in the Preprocessing step.
         # In most cases, they will take the same value as in the config/Preprocessing.py
-        self.base_dir = "/home/winter/TreeSegment/An-unexpectedly-large-count-of-trees-in-the-western-Sahara-and-Sahel-v1.0.0/write4_dir"
-        self.image_type = '.png'
+        self.base_dir = "/Volumes/WinterSSD/treeseg/dataset_resize"
+        # self.image_type = '.png'
+        self.image_type = '.npy'
         self.ndvi_fn = 'ndvi'
         self.pan_fn = 'pan'
         self.annotation_fn = 'annotation'
-        self.weight_fn = 'boundary'
+        self.weight_fn = 'weight'
         
         # Patch generation; from the training areas (extracted in the last notebook), we generate fixed size patches.
         # random: a random training area is selected and a patch in extracted from a random location inside that training area. Uses a lazy stratergy i.e. batch of patches are extracted on demand.

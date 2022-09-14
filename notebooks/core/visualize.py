@@ -1,7 +1,4 @@
-from contextlib import nullcontext
-from curses.ascii import NUL
 import matplotlib.pyplot as plt  # plotting tools
-from matplotlib.patches import Polygon
 
 def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, save=False, dir=""):
     """Display the given set of images, optionally with titles.
