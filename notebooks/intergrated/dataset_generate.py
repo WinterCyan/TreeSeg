@@ -1,9 +1,9 @@
 from __future__ import annotations
 import sys
 from time import time
-sys.path.append("/home/winter/code/TreeSeg/notebooks/")
+sys.path.append("/home/lenovo/code/TreeSeg/notebooks/")
 import os
-from config.Preprocessing import *
+from configx.Preprocessing import *
 from PIL import Image
 import numpy as np
 np.set_printoptions(threshold=sys.maxsize)
@@ -49,9 +49,9 @@ def cut_area(fn, source_dir, mean_thr=0.1):
             mean_4 = np.mean(square_img[2,HALF_SPLIT_UNIT:,HALF_SPLIT_UNIT:])
             if mean_1>half_mean_thr and mean_2>half_mean_thr and mean_3>half_mean_thr and mean_4>half_mean_thr and mean_v>mean_thr:
                 for k in range(len(TYPE_ENUM)):
-                    # if k==1:
-                    #     print(square_img[k])
-                    #     print(square_img[k].shape)
+                    if k==1:
+                        print(square_img[k])
+                        print(square_img[k].shape)
                     #     np.save("/home/winter/Desktop/1.npy", square_img[k])
                     #     # cv.imwrite("/home/winter/Desktop/1.png", square_img[k])
                     #     # tif_img = Image.fromarray(square_img[k])
@@ -61,7 +61,7 @@ def cut_area(fn, source_dir, mean_thr=0.1):
                     #     load_npy = np.load("/home/winter/Desktop/1.npy")
                     #     plt.imshow(load_npy)
                     #     # load_img = np.array(temp_img)
-                    np.save(dataset_dir+f"{fn}_{idx}_{TYPE_ENUM[k]}.npy",square_img[k])
+                    # np.save(dataset_dir+f"{fn}_{idx}_{TYPE_ENUM[k]}.npy",square_img[k])
     plt.show()
 
 if __name__ == '__main__':

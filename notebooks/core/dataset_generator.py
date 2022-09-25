@@ -133,3 +133,67 @@ class DataGenerator():
 
                 ann_joint = np.concatenate((ann,weights), axis=-1)
                 yield X, ann_joint
+
+
+class DataGenerator_Input():
+    """The datagenerator class. Defines methods for generating patches randomly and sequentially from given frames.
+    """
+
+    def __init__(self, input_image_channel, patch_size, frame_list, frames, augmenter=None):
+        """Datagenerator constructor
+
+        Args:
+            input_image_channel (list(int)): Describes which channels is the image are input channels.
+            patch_size (tuple(int,int)): Size of the generated patch.
+            frame_list (list(int)): List containing the indexes of frames to be assigned to this generator.
+            frames (list(FrameInfo)): List containing all the frames i.e. instances of the frame class.
+            augmenter  (string, optional): augmenter to use. None for no augmentation and iaa for augmentations defined in imageAugmentationWithIAA function.
+        """
+        self.input_image_channel = input_image_channel
+        self.patch_size = patch_size
+        self.frame_list = frame_list
+        self.frames = frames
+        self.augmenter = augmenter
+
+    # Return all training and label images and weights, generated sequentially with the given step size
+    def all_sequential_patches(self, step_size, normalize = 1):
+        patches = []
+        for fn in self.frame_list:
+            frame = self.frames[fn]
+            ps = frame.sequential_patches(self.patch_size, step_size, normalize)
+            patches.extend(ps)
+        data = np.array(patches)
+        img = data[..., self.input_image_channel]
+        return img
+
+    # Return a batch of training and label images, generated randomly
+    def random_patch(self, BATCH_SIZE, normalize):
+        patches = []
+        for i in range(BATCH_SIZE):
+            fn = np.random.choice(self.frame_list)
+            frame = self.frames[fn]
+            patch = frame.random_patch(self.patch_size, normalize)
+            patches.append(patch)
+        data = np.array(patches)
+
+        img = data[..., self.input_image_channel]
+        return img
+
+    # Normalization takes a probability between 0 and 1 that an image will be locally normalized.
+    def random_generator(self, BATCH_SIZE, normalize = 1):
+        """Generator for random patches, yields random patches from random location in randomly chosen frames.
+
+        Args:
+            BATCH_SIZE (int): Number of patches to generate in each yield (sampled independently).
+            normalize (float): Probability with which a frame is normalized.
+        """
+        seq = imageAugmentationWithIAA()
+
+        while True:
+            X = self.random_patch(BATCH_SIZE, normalize)
+            if self.augmenter == 'iaa':
+                seq_det = seq.to_deterministic()
+                X = seq_det.augment_images(X)
+                yield X
+            else:
+                yield X

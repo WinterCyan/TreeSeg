@@ -6,7 +6,8 @@ class Configuration:
         # Initialize the data related variables used in the notebook
         # For reading the ndvi, pan and annotated images generated in the Preprocessing step.
         # In most cases, they will take the same value as in the config/Preprocessing.py
-        self.base_dir = "/Volumes/WinterSSD/treeseg/dataset_resize"
+        self.base_dir = "/media/lenovo/palsar(部分压缩包)/resize_test"
+        # self.base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
         # self.image_type = '.png'
         self.image_type = '.npy'
         self.ndvi_fn = 'ndvi'
@@ -19,6 +20,7 @@ class Configuration:
         # sequential: training areas are selected in the given order and patches extracted from these areas sequential with a given step size. All the possible patches are returned in one call.
         self.patch_generation_stratergy = 'random' # 'random' or 'sequential'
         self.patch_size = (256,256,4) # Height * Width * (Input + Output) channels
+        self.patch_size_input = (256,256,2) # Height * Width * (Input + Output) channels
         # # When stratergy == sequential, then you need the step_size as well
         # step_size = (128,128)
         
@@ -28,7 +30,7 @@ class Configuration:
         
         # Probability with which the generated patches should be normalized 0 -> don't normalize, 1 -> normalize all
         # ?
-        self.normalize = 0.4 
+        self.normalize = 1.0
 
         
         # The split of training areas into training, validation and testing set, is cached in patch_dir.

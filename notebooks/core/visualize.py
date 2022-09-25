@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt  # plotting tools
+import os
 
 def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, save=False, dir=""):
     """Display the given set of images, optionally with titles.
@@ -8,17 +9,21 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
     norm: Optional. A Normalize instance to map values to colors.
     interpolation: Optional. Image interpolation to use for display.
     """
-    print("shape: ", img.shape)
+    # print("shape: ", img.shape)
     cols = img.shape[-1]
     rows = img.shape[0]
     titles = titles if titles is not None else [""] * (rows*cols)
 
-    plt.figure(figsize=(14, 14 * rows // cols))
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+    #plt.figure(figsize=(14, 14 * rows // cols))
     for i in range(rows):
         for j in range(cols):
             plt.subplot(rows, cols, (i*cols) + j + 1)
             plt.axis('off')
-            plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
+            #plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
             if save:
-                plt.imsave(fname=f"{dir}/disp/disp{i}{j}.png", arr=img[i,...,j])
+                plt.imsave(fname=f"{dir}/disp{cmap}{norm}_{i}{j}.png", arr=img[i,...,j])
+    #plt.show()
 
