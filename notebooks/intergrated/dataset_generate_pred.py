@@ -20,18 +20,19 @@ from configx import UNetTraining
 config = UNetTraining.Configuration()
 from core.frame_info import FrameInfo_Input
 config = Configuration("full_area3")
-SPLIT_UNIT = 55
+SPLIT_UNIT = 100
 HALF_SPLIT_UNIT = 54
-dataset_dir = "/media/lenovo/palsar(部分压缩包)/resize/"
+dataset_dir = "/media/lenovo/Elements SE/predict/clip1/"
 TYPE_ENUM = ["ndvi","pan"]#,"annotation","weight"
 
 # read from pan_*, ndvi_*, boundary_*, annotation_* files, split into square dataset imgs.
+
 def cut_area(fn, source_dir, mean_thr=0.1):
     frames = []
     half_mean_thr = mean_thr/2
     img_format = ".tif"
-    full_path1 = os.path.join(source_dir, "ndvi.tif")
-    full_path2 = os.path.join(source_dir, "pan.tif")
+    full_path1 = os.path.join(source_dir, "prediect1_ndvi.tif")
+    full_path2 = os.path.join(source_dir, "prediect1_pan.tif")
 
     #ndvi_im = np.array(Image.open(full_path1))
     #pan_im = np.array(Image.open(full_path2))
@@ -41,13 +42,13 @@ def cut_area(fn, source_dir, mean_thr=0.1):
     pan_im1 =pan_img.read(1)
     pan_im2 =pan_img.read(2)
     pan_im3=pan_img.read(3)
-    full_images = np.array([ndvi_im,pan_im1,pan_im2,pan_im3])#, annotation_im, weight_im
-    f = FrameInfo_Input(full_images)
-    frames.append(f)
-    # annotation_channels = config.input_label_channel + config.input_weight_channel
-    
-    train_generator = DataGenerator_Input(config.input_image_channel, config.patch_size, full_images, frames, augmenter = 'iaa').random_generator(config.BATCH_SIZE, normalize = config.normalize)
 
+    pan_im1=pan_im1[0:3557,:]
+    pan_im2=pan_im2[0:3557,:]
+    pan_im3=pan_im3[0:3557,:]
+
+
+    full_images = np.array([ndvi_im,pan_im1,pan_im2,pan_im3])#, annotation_im, weight_im
     #annotation_im = np.array(Image.open(full_path.replace(config.extracted_ndvi_filename ,config.extracted_annotation_filename)))
     #weight_im = np.array(Image.open(full_path.replace(config.extracted_ndvi_filename ,config.extracted_boundary_filename)))
 
@@ -91,3 +92,5 @@ def cut_area(fn, source_dir, mean_thr=0.1):
 if __name__ == '__main__':
     for i in range(0,226):
         cut_area(str(i), source_dir=config.path_to_write)
+
+

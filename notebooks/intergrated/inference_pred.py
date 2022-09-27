@@ -49,10 +49,11 @@ print(f"all files: {len(all_files)}")
 
 # load all ndvi*.png
 # all_files_ndvi = [fn for fn in all_files if fn.startswith(config.ndvi_fn) and fn.endswith(config.image_type)]
-all_files_ndvi = [fn for fn in all_files if fn.__contains__(config.ndvi_fn) and fn.endswith(config.image_type)][0:1000]
+all_files_ndvi = [fn for fn in all_files if fn.__contains__(config.ndvi_fn) and fn.endswith(config.image_type)]#[0:1000]
 print(f"all ndvi: {len(all_files_ndvi)}")
 for i, fn in enumerate(all_files_ndvi):
     ndvi_img = np.load(os.path.join(config.base_dir, fn))
+    ndvi_img[ndvi_img<=0.5]=0
     pan_img = np.load(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.pan_fn)))
     comb_img = np.stack((ndvi_img, pan_img), axis=0)
     comb_img = np.transpose(comb_img, axes=(1,2,0)) #Channel at the end
@@ -132,7 +133,7 @@ model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dic
 model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, accuracy, specificity, sensitivity])
 
 # Print one batch on the training/test data!
-for i in range(1):
+for i in range(50):
     test_images = next(test_generator)
     #5 images per row: pan, ndvi, label, weight, prediction
     print(test_images.shape)
@@ -145,4 +146,3 @@ for i in range(1):
     # real_label[real_label>0.5]=1
     # real_label[real_label<=0.5]=0
     display_images(np.concatenate((test_images, prediction), axis = -1),save=True,dir=f"/home/lenovo/treeseg-dataset/predictions-0925/{i}")
-    print(test_images)

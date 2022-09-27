@@ -6,7 +6,7 @@ class Configuration:
         # Initialize the data related variables used in the notebook
         # For reading the ndvi, pan and annotated images generated in the Preprocessing step.
         # In most cases, they will take the same value as in the config/Preprocessing.py
-        self.base_dir = "/media/lenovo/palsar(部分压缩包)/resize_test"
+        self.base_dir = "/media/lenovo/Elements SE/predict/predict1/"
         # self.base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
         # self.image_type = '.png'
         self.image_type = '.npy'
@@ -53,4 +53,6 @@ class Configuration:
         # maximum number of steps_per_epoch in training
         self.MAX_TRAIN_STEPS = 1000
         self.model_path = './saved_models/UNet/'
+
+        self.path_to_write="/media/lenovo/Elements SE/predict/predict1/"
 
