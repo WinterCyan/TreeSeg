@@ -8,34 +8,244 @@ dataset preprocessing, split, (prediction), merge pipeline
 6. convert to shp, count tree
 """
 
-from operator import contains
+import sys
+sys.path.append("/Users/wintercyan/code/TreeSeg/notebooks/")
 import numpy as np
 import rasterio
 import os
+import rasterio.mask
+import rasterio.warp
+import rasterio.merge
+import geopandas as gps
+import pandas as pd
+import shapely
+from shapely.geometry import box
+import json
+import PIL.ImageDraw
+from core.frame_info import image_normalize
+import matplotlib.pyplot as plt
+from tqdm import tqdm_notebook as tqdm
+import warnings
+warnings.filterwarnings("ignore")
 
 def image_normalize(im, axis = (0,1), c = 1e-8):
     return (im - im.mean(axis)) / (im.std(axis) + c)
 
-def read_tif(dir):
-    pass
+def calculateBoundaryWeight(polygonsInArea, scale_polygon = 1.5, output_plot = True): 
+    '''
+    For each polygon, create a weighted boundary where the weights of shared/close boundaries is higher than weights of solitary boundaries.
+    '''
+    # If there are polygons in a area, the boundary polygons return an empty geo dataframe
+    if not polygonsInArea:
+        return gps.GeoDataFrame({})
+    tempPolygonDf = pd.DataFrame(polygonsInArea)
+    tempPolygonDf.reset_index(drop=True,inplace=True)
+    tempPolygonDf = gps.GeoDataFrame(tempPolygonDf.drop(columns=['Id']))
+    new_c = []
+    #for each polygon in area scale, compare with other polygons:
+    for i in tqdm(range(len(tempPolygonDf))):
+        pol1 = gps.GeoSeries(tempPolygonDf.iloc[i][0])
+        sc = pol1.scale(xfact=scale_polygon, yfact=scale_polygon, zfact=scale_polygon, origin='center')
+        scc = pd.DataFrame(columns=['id', 'geometry'])
+        scc = scc.append({'id': None, 'geometry': sc[0]}, ignore_index=True)
+        scc = gps.GeoDataFrame(pd.concat([scc]*len(tempPolygonDf), ignore_index=True))
 
+        pol2 = gps.GeoDataFrame(tempPolygonDf[~tempPolygonDf.index.isin([i])])
+        #scale pol2 also and then intersect, so in the end no need for scale
+        pol2 = gps.GeoDataFrame(pol2.scale(xfact=scale_polygon, yfact=scale_polygon, zfact=scale_polygon, origin='center'))
+        pol2.columns = ['geometry']
+
+        ints = scc.intersection(pol2)
+        for k in range(len(ints)):
+            if ints.iloc[k]!=None:
+                if ints.iloc[k].is_empty !=1:
+                    new_c.append(ints.iloc[k])
+    new_c = gps.GeoSeries(new_c)
+    new_cc = gps.GeoDataFrame({'geometry': new_c})
+    new_cc.columns = ['geometry']
+    bounda = gps.overlay(new_cc, tempPolygonDf, how='difference')
+    if output_plot:
+        fig, ax = plt.subplots(figsize = (10,10))
+        bounda.plot(ax=ax,color = 'red')
+        plt.show()
+    #change multipolygon to polygon
+    bounda = bounda.explode()
+    bounda.reset_index(drop=True,inplace=True)
+    #bounda.to_file('boundary_ready_to_use.shp')
+    return bounda
+
+def dividePolygonsInTrainingAreas(trainingPolygon, trainingArea):
+    '''
+    Assign annotated ploygons in to the training areas.
+    '''
+    # For efficiency, assigned polygons are removed from the list, we make a copy here. 
+    cpTrainingPolygon = trainingPolygon.copy()
+    splitPolygons = {}
+    for i in tqdm(trainingArea.index):
+        spTemp = []
+        allocated = []
+        for j in cpTrainingPolygon.index:
+            if trainingArea.loc[i]['geometry'].intersects(cpTrainingPolygon.loc[j]['geometry']):
+                spTemp.append(cpTrainingPolygon.loc[j])
+                allocated.append(j)
+
+            # Order of bounds: minx miny maxx maxy
+        boundary = calculateBoundaryWeight(spTemp, scale_polygon = 1.5, output_plot = False)
+        splitPolygons[trainingArea.loc[i]['id']] = {'polygons':spTemp, 'boundaryWeight': boundary, 'bounds':list(trainingArea.bounds.loc[i]),}
+        cpTrainingPolygon = cpTrainingPolygon.drop(allocated)
+    return splitPolygons
+
+def readInputImages(imageBaseDir, rawImageFileType, rawNdviImagePrefix, rawPanImagePrefix):
     """
+    Reads all images with prefix ndvi_image_prefix and image_file_type datatype in the image_base_dir directory.
+    """     
+    
+    ndviImageFn = []
+    for root, dirs, files in os.walk(imageBaseDir):
+        for file in files:
+            if file.endswith(rawImageFileType) and file.startswith(rawNdviImagePrefix):
+                 ndviImageFn.append(os.path.join(root, file))
+    panImageFn = [fn.replace(rawNdviImagePrefix, rawPanImagePrefix) for fn in ndviImageFn]
+    inputImages = list(zip(ndviImageFn,panImageFn))
+    return inputImages
 
-    Args:
-        tif_dir: folder contains ALL pan-ndvi tif pairs
-        sample_dir: folder contains ALL training/inference samples
-
+def drawPolygons(polygons, shape, outline, fill):
     """
+    From the polygons, create a numpy mask with fill value in the foreground and 0 value in the background.
+    Outline (i.e the edge of the polygon) can be assigned a separate value.
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    mask = PIL.Image.fromarray(mask)
+    draw = PIL.ImageDraw.Draw(mask)
+    #Syntax: PIL.ImageDraw.Draw.polygon(xy, fill=None, outline=None)
+    #Parameters:
+    #xy – Sequence of either 2-tuples like [(x, y), (x, y), …] or numeric values like [x, y, x, y, …].
+    #outline – Color to use for the outline.
+    #fill – Color to use for the fill.
+    #Returns: An Image object.
+    for polygon in polygons:
+        xy = [(point[1], point[0]) for point in polygon]
+        draw.polygon(xy=xy, outline=outline, fill=fill)
+    mask = np.array(mask)#, dtype=bool)   
+    return(mask)
 
-def split_samples(tif_dir, sample_dir, split_unit, mode, area_polygon_dir, norm_mode):
+def rowColPolygons(areaDf, areaShape, profile, filename, outline, fill):
+    """
+    Convert polygons coordinates to image pixel coordinates, create annotation image using drawPolygons() and write the results into an image file.
+    """
+    transform = profile['transform']
+    polygons = []
+    for i in areaDf.index:
+        gm = areaDf.loc[i]['geometry']
+        if isinstance(gm, shapely.geometry.MultiPolygon):
+            continue
+        a,b = zip(*list(gm.exterior.coords))
+        row, col = rasterio.transform.rowcol(transform, a, b)
+        zipped = list(zip(row,col)) #[list(rc) for rc in list(zip(row,col))]
+        polygons.append(zipped)
+    with open(filename, 'w') as outfile:  
+        json.dump({'Trees': polygons}, outfile)
+    mask = drawPolygons(polygons,areaShape, outline=outline, fill=fill)    
+    profile['dtype'] = rasterio.int16
+    with rasterio.open(filename.replace('json', 'png'), 'w', **profile) as dst:
+        dst.write(mask.astype(rasterio.int16), 1)
+
+def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter, normalize=True):
+    """
+    Write the part of raw image that overlaps with a training area into a separate image file. 
+    Use rowColPolygons to create and write annotation and boundary image from polygons in the training area.
+    """
+    try:
+        for band, imFn in zip(bands, imagesFilename):
+            # Rasterio reads file channel first, so the sm[0] has the shape [1 or ch_count, x,y]
+            # If raster has multiple channels, then bands will be [0, 1, ...] otherwise simply [0]
+            dt = sm[0][band].astype(profile['dtype'])
+            if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
+                dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
+            with rasterio.open(os.path.join(writePath, imFn+'_{}.png'.format(writeCounter)), 'w', **profile) as dst:
+                    dst.write(dt, 1) 
+        if annotationFilename:
+            annotation_json_filepath = os.path.join(writePath,annotationFilename+'_{}.json'.format(writeCounter))
+            # The object is given a value of 1, the outline or the border of the object is given a value of 0 and rest of the image/background is given a a value of 0
+            rowColPolygons(polygonsInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, annotation_json_filepath, outline=0, fill = 1)
+        if boundaryFilename:
+            boundary_json_filepath = os.path.join(writePath,boundaryFilename+'_{}.json'.format(writeCounter))
+            # The boundaries are given a value of 1, the outline or the border of the boundaries is also given a value of 1 and rest is given a value of 0
+            rowColPolygons(boundariesInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, boundary_json_filepath, outline=1 , fill=1)
+        return(writeCounter+1)
+    except Exception as e:
+        print(e)
+        print("Something nasty happened, could not write the annotation or the mask file!")
+        return writeCounter
+        
+def findOverlap(img, areasWithPolygons, writePath, imageFilename, annotationFilename, boundaryFilename, bands, writeCounter=1):
+    """
+    Finds overlap of image with a training area.
+    Use writeExtractedImageAndAnnotation() to write the overlapping training area and corresponding polygons in separate image files.
+    """
+    overlapppedAreas = set()
+    for areaID, areaInfo in areasWithPolygons.items():
+        #Convert the polygons in the area in a dataframe and get the bounds of the area. 
+        polygonsInAreaDf = gps.GeoDataFrame(areaInfo['polygons'])
+        boundariesInAreaDf = gps.GeoDataFrame(areaInfo['boundaryWeight'])    
+        bboxArea = box(*areaInfo['bounds'])
+        bboxImg = box(*img.bounds)
+        #Extract the window if area is in the image
+        if(bboxArea.intersects(bboxImg)):
+            profile = img.profile  
+            sm = rasterio.mask.mask(img, [bboxArea], all_touched=True, crop=True )
+            profile['height'] = sm[0].shape[1]
+            profile['width'] = sm[0].shape[2]
+            profile['transform'] = sm[1]
+            # That's a problem with rasterio, if the height and the width are less then 256 it throws: ValueError: blockysize exceeds raster height 
+            # So I set the blockxsize and blockysize to prevent this problem
+            profile['blockxsize'] = 32
+            profile['blockysize'] = 32
+            profile['count'] = 1
+            profile['dtype'] = rasterio.float32
+            # writeExtractedImageAndAnnotation writes the image, annotation and boundaries and returns the counter of the next file to write. 
+            writeCounter = writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imageFilename, annotationFilename, boundaryFilename, bands, writeCounter)
+            overlapppedAreas.add(areaID)
+    return(writeCounter, overlapppedAreas)
+
+def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writePath, ndviFilename, panFilename, annotationFilename, boundaryFilename, bands, writeCounter):
+    """
+    Iterates over raw ndvi and pan images and using findOverlap() extract areas that overlap with training data. The overlapping areas in raw images are written in a separate file, and annotation and boundary file are created from polygons in the overlapping areas.
+    Note that the intersection with the training areas is performed independently for raw ndvi and pan images. This is not an ideal solution and it can be combined in the future.
+    """
+    if not os.path.exists(writePath):
+        os.makedirs(writePath)
+        
+    overlapppedAreas = set()                   
+    for imgs in tqdm(inputImages):
+        ndviImg = rasterio.open(imgs[0])
+        panImg = rasterio.open(imgs[1])
+
+        ncpan, imOverlapppedAreasPan = findOverlap(panImg, areasWithPolygons, writePath=writePath, imageFilename=[panFilename], annotationFilename=annotationFilename, boundaryFilename=boundaryFilename, bands=bands, writeCounter=writeCounter )
+        ncndvi,imOverlapppedAreasNdvi = findOverlap(ndviImg, areasWithPolygons, writePath=writePath, imageFilename=[ndviFilename], annotationFilename=annotationFilename, boundaryFilename=boundaryFilename, bands=bands, writeCounter=writeCounter)
+        if ncndvi == ncpan:
+            writeCounter = ncndvi
+        else:
+            print('Couldnt create mask!!!')
+            print(ncndvi)
+            print(ncpan)
+            break;
+        if overlapppedAreas.intersection(imOverlapppedAreasNdvi):
+            print(f'Information: Training area(s) {overlapppedAreas.intersection(imOverlapppedAreasNdvi)} spans over multiple raw images. This is common and expected in many cases. A part was found to overlap with current input image.')
+        overlapppedAreas.update(imOverlapppedAreasNdvi)
+    
+    allAreas = set(areasWithPolygons.keys())
+    if allAreas.difference(overlapppedAreas):
+        print(f'Warning: Could not find a raw image correspoinding to {allAreas.difference(overlapppedAreas)} areas. Make sure that you have provided the correct paths!')
+
+def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
     """read tif & split into pngs
 
     Args:
         tif_dir: folder contains ALL pan-ndvi tif pairs
         sample_dir: folder contains ALL training/inference samples
         split_unit: pixel size of split square
-        mode: ["train", "inference"], for split training data or inference data
-        area_polygon_dir (_type_): if mode="train", area_polygon_dir NOT null
+        norm_mode: norm image before/after split
     """
 
     tif_dir = tif_dir.rstrip("/")
@@ -106,16 +316,85 @@ def split_samples(tif_dir, sample_dir, split_unit, mode, area_polygon_dir, norm_
                     dst.write(ndvi_sample, 1)
                     dst.close()
 
+def split_training_samples(tif_dir, area_polygon_dir, sample_dir, split_unit, norm_mode="after"):
+    """read tif, shp & split into training samples
+
+    Args:
+        tif_dir: folder contains tif pairs
+        area_polygon_dir: folder contains area & polygon shp
+            tif & area & polygon filename patter: [pan-***.tif, ndvi-***.tif, area-***.shp/sbx..., polygon-***.shp/sbx...]
+        sample_dir: folder to save samples, [pan, ndvi, annotation, weight]
+        split_unit: pixel size of sample
+        norm_mode: norm image before/after split. Defaults to "after".
+    """
+
+    tif_dir = tif_dir.rstrip("/")
+    area_polygon_dir = area_polygon_dir.rstrip("/")
+    sample_dir = sample_dir.rstrip("/")
+
+    # get tif pairs, for every pair of tif, find area & polygon shp.
+    all_pan_filenames = [name for name in os.listdir(tif_dir) if name.startswith("pan-") and name.endswith(".tif")]
+    all_ndvi_filenames = [name for name in os.listdir(tif_dir) if name.startswith("ndvi-") and name.endswith(".tif")]
+    all_area_filenames = [name for name in os.listdir(area_polygon_dir) if name.startswith("area-") and name.endswith(".shp")]
+    all_polygon_filenames = [name for name in os.listdir(area_polygon_dir) if name.startswith("polygon-") and name.endswith(".shp")]
+
+    for pan_item in all_pan_filenames:
+        assert all_ndvi_filenames.count(pan_item.replace("pan","ndvi")), "cannot pair up all pan with ndvi image!"
+        assert all_area_filenames.count(pan_item.replace("pan","area").replace(".tif",".shp")), "cannot pair up all pan with area file!"
+        assert all_polygon_filenames.count(pan_item.replace("pan","polygon").replace(".tif",".shp")), "cannot pair up all pan with polygon file!"
+
+    for pan_item in all_pan_filenames:
+        print(f"pan_item: {pan_item}")
+        # pan_full_path = f"{tif_dir}/{pan_item}"
+        # ndvi_full_path = f"{tif_dir}/{pan_item.replace('pan', 'ndvi')}"
+        area_full_path = f"{area_polygon_dir}/{pan_item.replace('pan','area').replace('.tif','.shp')}"
+        polygon_full_path = f"{area_polygon_dir}/{pan_item.replace('pan','polygon').replace('.tif','.shp')}"
+        area_file = gps.read_file(area_full_path)
+        polygon_file = gps.read_file(polygon_full_path)
+        print(f'read a total of {polygon_file.shape[0]} object polygons and {area_file.shape[0]} training areas.')
+        
+        if area_file.crs != polygon_file.crs:
+            print("warning: area & polygon CRS dose not match!")
+            target_crs = polygon_file.crs
+            area_file = area_file.to_crs(target_crs)
+        print(f"polygon crs: {polygon_file.crs}, area crs: {area_file.crs}")
+        assert polygon_file.crs == area_file.crs
+
+        area_file['id'] = range(area_file.shape[0])
+        areas_with_polygons = dividePolygonsInTrainingAreas(polygon_file, area_file)
+        print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
+
+        input_imgs = readInputImages(tif_dir, ".tif", "ndvi-", "pan-")
+        print(f'found a total of {len(input_imgs)} pair of raw images to process!')
+
+        write_counter = 0
+        extractAreasThatOverlapWithTrainingData(
+            inputImages=input_imgs,
+            areasWithPolygons=areas_with_polygons,
+            writePath=sample_dir, 
+            ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}-",
+            panFilename=f"{pan_item.replace('.tif','')}-",
+            annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}-",
+            boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}-",
+            bands=[0],
+            writeCounter=write_counter
+        )
+
+
 
 
 if __name__ == '__main__':
-    split_samples(
-            tif_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/", 
-            sample_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/png_dataset/",
-            split_unit=160,
-            mode="",
-            area_polygon_dir="",
-            norm_mode="after_split"
-        )
+    # split_inference_samples(
+    #         tif_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/", 
+    #         sample_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/png_dataset/",
+    #         split_unit=160,
+    #         norm_mode="after_split"
+    #     )
+    split_training_samples(
+        tif_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/", 
+        area_polygon_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/",
+        sample_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/png_dataset/",
+        split_unit=0
+    )
     # inference()
     # merge_results()
