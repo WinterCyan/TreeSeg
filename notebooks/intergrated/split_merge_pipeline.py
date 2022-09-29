@@ -8,6 +8,7 @@ dataset preprocessing, split, (prediction), merge pipeline
 6. convert to shp, count tree
 """
 
+import argparse
 import sys
 sys.path.append("/Users/wintercyan/code/TreeSeg/notebooks/")
 import numpy as np
@@ -22,9 +23,10 @@ import shapely
 from shapely.geometry import box
 import json
 import PIL.ImageDraw
+from PIL import Image
 from core.frame_info import image_normalize
 import matplotlib.pyplot as plt
-from tqdm import tqdm_notebook as tqdm
+from tqdm import tqdm
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -43,7 +45,7 @@ def calculateBoundaryWeight(polygonsInArea, scale_polygon = 1.5, output_plot = T
     tempPolygonDf = gps.GeoDataFrame(tempPolygonDf.drop(columns=['Id']))
     new_c = []
     #for each polygon in area scale, compare with other polygons:
-    for i in tqdm(range(len(tempPolygonDf))):
+    for i in tqdm(range(len(tempPolygonDf)), desc="process polygons"):
         pol1 = gps.GeoSeries(tempPolygonDf.iloc[i][0])
         sc = pol1.scale(xfact=scale_polygon, yfact=scale_polygon, zfact=scale_polygon, origin='center')
         scc = pd.DataFrame(columns=['id', 'geometry'])
@@ -74,14 +76,28 @@ def calculateBoundaryWeight(polygonsInArea, scale_polygon = 1.5, output_plot = T
     #bounda.to_file('boundary_ready_to_use.shp')
     return bounda
 
-def dividePolygonsInTrainingAreas(trainingPolygon, trainingArea):
+def dividePolygonsInTrainingAreas(trainingPolygon, trainingArea, print_polygon_num=False):
     '''
     Assign annotated ploygons in to the training areas.
     '''
     # For efficiency, assigned polygons are removed from the list, we make a copy here. 
     cpTrainingPolygon = trainingPolygon.copy()
     splitPolygons = {}
-    for i in tqdm(trainingArea.index):
+    polygon_num_in_area = []
+
+    # ---------------------- counting polygons number ----------------------
+    if print_polygon_num:
+        print("counting polygons in areas...")
+        for i in trainingArea.index:
+            polygon_count = 0
+            for j in cpTrainingPolygon.index:
+                if trainingArea.loc[i]['geometry'].intersects(cpTrainingPolygon.loc[j]['geometry']):
+                    polygon_count += 1
+            polygon_num_in_area.append(polygon_count)
+        print(f"polygons in area: {polygon_num_in_area}")
+    # ---------------------- counting polygons number ----------------------
+
+    for i in tqdm(trainingArea.index, desc="divide polygons in training areas"):
         spTemp = []
         allocated = []
         for j in cpTrainingPolygon.index:
@@ -162,14 +178,14 @@ def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundar
             dt = sm[0][band].astype(profile['dtype'])
             if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
                 dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
-            with rasterio.open(os.path.join(writePath, imFn+'_{}.png'.format(writeCounter)), 'w', **profile) as dst:
+            with rasterio.open(os.path.join(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
                     dst.write(dt, 1) 
         if annotationFilename:
-            annotation_json_filepath = os.path.join(writePath,annotationFilename+'_{}.json'.format(writeCounter))
+            annotation_json_filepath = os.path.join(writePath,annotationFilename+'-area{}.json'.format(writeCounter))
             # The object is given a value of 1, the outline or the border of the object is given a value of 0 and rest of the image/background is given a a value of 0
             rowColPolygons(polygonsInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, annotation_json_filepath, outline=0, fill = 1)
         if boundaryFilename:
-            boundary_json_filepath = os.path.join(writePath,boundaryFilename+'_{}.json'.format(writeCounter))
+            boundary_json_filepath = os.path.join(writePath,boundaryFilename+'-area{}.json'.format(writeCounter))
             # The boundaries are given a value of 1, the outline or the border of the boundaries is also given a value of 1 and rest is given a value of 0
             rowColPolygons(boundariesInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, boundary_json_filepath, outline=1 , fill=1)
         return(writeCounter+1)
@@ -217,7 +233,7 @@ def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writ
         os.makedirs(writePath)
         
     overlapppedAreas = set()                   
-    for imgs in tqdm(inputImages):
+    for imgs in tqdm(inputImages, desc="read tif images"):
         ndviImg = rasterio.open(imgs[0])
         panImg = rasterio.open(imgs[1])
 
@@ -248,6 +264,8 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         norm_mode: norm image before/after split
     """
 
+    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
+
     tif_dir = tif_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
     all_pan_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("pan") or name.__contains__("PAN")) and name.endswith(".tif")]
@@ -274,7 +292,6 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         pan_profile['dtype'] = rasterio.float32
         pan_profile['height'] = split_unit
         pan_profile['width'] = split_unit
-        # pan_profile['transform'] = pan_dataset
         pan_profile['blockxsize'] = 32
         pan_profile['blockysize'] = 32
         pan_profile['count'] = 1
@@ -282,7 +299,6 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         ndvi_profile['dtype'] = rasterio.float32
         ndvi_profile['height'] = split_unit
         ndvi_profile['width'] = split_unit
-        # ndvi_profile['transform'] = ndvi_dataset
         ndvi_profile['blockxsize'] = 32
         ndvi_profile['blockysize'] = 32
         ndvi_profile['count'] = 1
@@ -300,7 +316,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         print(f"spliting into {split_rows}x{split_cols} squares...")
         for r in range(split_rows):
             for c in range(split_cols):
-                idx_str = f"r{r}-c{c}"
+                idx_str = f"r{r}c{c}"
                 print(f"writing {idx_str}...")
                 pan_sample = pan_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 ndvi_sample = ndvi_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
@@ -316,7 +332,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                     dst.write(ndvi_sample, 1)
                     dst.close()
 
-def split_training_samples(tif_dir, area_polygon_dir, sample_dir, split_unit, norm_mode="after"):
+def split_training_samples(tif_dir, area_polygon_dir, interm_png_dir, sample_dir, split_unit, norm_mode="after_split"):
     """read tif, shp & split into training samples
 
     Args:
@@ -330,7 +346,10 @@ def split_training_samples(tif_dir, area_polygon_dir, sample_dir, split_unit, no
 
     tif_dir = tif_dir.rstrip("/")
     area_polygon_dir = area_polygon_dir.rstrip("/")
+    interm_png_dir = interm_png_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
+
+    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
 
     # get tif pairs, for every pair of tif, find area & polygon shp.
     all_pan_filenames = [name for name in os.listdir(tif_dir) if name.startswith("pan-") and name.endswith(".tif")]
@@ -349,19 +368,22 @@ def split_training_samples(tif_dir, area_polygon_dir, sample_dir, split_unit, no
         # ndvi_full_path = f"{tif_dir}/{pan_item.replace('pan', 'ndvi')}"
         area_full_path = f"{area_polygon_dir}/{pan_item.replace('pan','area').replace('.tif','.shp')}"
         polygon_full_path = f"{area_polygon_dir}/{pan_item.replace('pan','polygon').replace('.tif','.shp')}"
-        area_file = gps.read_file(area_full_path)
-        polygon_file = gps.read_file(polygon_full_path)
-        print(f'read a total of {polygon_file.shape[0]} object polygons and {area_file.shape[0]} training areas.')
+        areas = gps.read_file(area_full_path)
+        polygons = gps.read_file(polygon_full_path)
+        print(f'read a total of {polygons.shape[0]} object polygons and {areas.shape[0]} training areas.')
         
-        if area_file.crs != polygon_file.crs:
+        if areas.crs != polygons.crs:
             print("warning: area & polygon CRS dose not match!")
-            target_crs = polygon_file.crs
-            area_file = area_file.to_crs(target_crs)
-        print(f"polygon crs: {polygon_file.crs}, area crs: {area_file.crs}")
-        assert polygon_file.crs == area_file.crs
+            target_crs = polygons.crs
+            areas = areas.to_crs(target_crs)
+        print(f"polygon crs: {polygons.crs}, area crs: {areas.crs}")
+        assert polygons.crs == areas.crs
 
-        area_file['id'] = range(area_file.shape[0])
-        areas_with_polygons = dividePolygonsInTrainingAreas(polygon_file, area_file)
+        areas['id'] = range(areas.shape[0])
+        # ------------- for test -------------
+        areas = areas[2:3][:]
+        # ------------- for test -------------
+        areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
         print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
 
         input_imgs = readInputImages(tif_dir, ".tif", "ndvi-", "pan-")
@@ -371,30 +393,128 @@ def split_training_samples(tif_dir, area_polygon_dir, sample_dir, split_unit, no
         extractAreasThatOverlapWithTrainingData(
             inputImages=input_imgs,
             areasWithPolygons=areas_with_polygons,
-            writePath=sample_dir, 
-            ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}-",
-            panFilename=f"{pan_item.replace('.tif','')}-",
-            annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}-",
-            boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}-",
+            writePath=interm_png_dir, 
+            ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
+            panFilename=f"{pan_item.replace('.tif','')}",
+            annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
+            boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
             bands=[0],
             writeCounter=write_counter
         )
 
+        print("matching polygon and annotation finished.")
+
+        # read extracted png dataset, [pan, ndvi, annotation, boundary]
+        # [pan,ndvi] -> [area 0, 1, ...] -> [pan/ndvi/anno/bound 0, 1, ...] -> [pan/ndvi/anno/bound 0_r0c0, 0_r0c1, ...]
+        # a pair of tif -> multi areas   ->  multi png group (1 <-> 1 area)  ->  rows x cols square (1 <-> png group)
+        # split: pan-0.tif ...  --->  pan-0_0.png  ---> pan-0_0_r0c1.png
+        # merge: patch up split margins with 0s
+        pan_file_names = [name.replace('.png','') for name in os.listdir(interm_png_dir) if name.startswith('pan-') and name.endswith('.png')]
+        for pan_item in pan_file_names:
+            pan_dataset = rasterio.open(f"{interm_png_dir}/{pan_item}.png")
+            pan_profile = pan_dataset.profile
+            ndvi_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
+            ndvi_profile = pan_dataset.profile
+            annotation_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','annotation')}.png")
+            annotation_profile = pan_dataset.profile
+            boundary_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','boundary')}.png")
+            boundary_profile = pan_dataset.profile
+
+            pan_profile['dtype'] = rasterio.float32
+            pan_profile['height'] = split_unit
+            pan_profile['width'] = split_unit
+            pan_profile['blockxsize'] = 32
+            pan_profile['blockysize'] = 32
+            pan_profile['count'] = 1
+
+            ndvi_profile['dtype'] = rasterio.float32
+            ndvi_profile['height'] = split_unit
+            ndvi_profile['width'] = split_unit
+            ndvi_profile['blockxsize'] = 32
+            ndvi_profile['blockysize'] = 32
+            ndvi_profile['count'] = 1
+
+            annotation_profile['dtype'] = rasterio.float32
+            annotation_profile['height'] = split_unit
+            annotation_profile['width'] = split_unit
+            annotation_profile['blockxsize'] = 32
+            annotation_profile['blockysize'] = 32
+            annotation_profile['count'] = 1
+
+            boundary_profile['dtype'] = rasterio.float32
+            boundary_profile['height'] = split_unit
+            boundary_profile['width'] = split_unit
+            boundary_profile['blockxsize'] = 32
+            boundary_profile['blockysize'] = 32
+            boundary_profile['count'] = 1
+
+            pan_img = pan_dataset.read(1).astype(pan_profile['dtype'])
+            ndvi_img = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
+            annotation_img = annotation_dataset.read(1).astype(annotation_profile['dtype'])
+            boundary_img = boundary_dataset.read(1).astype(boundary_profile['dtype'])
+            assert pan_img.shape == ndvi_img.shape == annotation_img.shape == boundary_img.shape
+
+            if norm_mode=="before_split":
+                pan_img = image_normalize(pan_img)
+                ndvi_img = image_normalize(ndvi_img)
+
+            height, width = pan_img.shape
+            row_count = int(height/split_unit)
+            col_count = int(width/split_unit)
+            for r in range(row_count):
+                for c in range(col_count):
+                    idx_str = f"r{r}c{c}"
+                    pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                    ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                    if norm_mode=="after_split":
+                        pan_sample = image_normalize(pan_sample)
+                        ndvi_sample = image_normalize(ndvi_sample)
+                    annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                    boundary_sample = boundary_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                    with rasterio.open(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
+                        dst.write(pan_sample, 1)
+                        dst.close()
+                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','ndvi')}-{idx_str}.png", 'w', **ndvi_profile) as dst:
+                        dst.write(ndvi_sample, 1)
+                        dst.close()
+                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','annotation')}-{idx_str}.png", 'w', **annotation_profile) as dst:
+                        dst.write(annotation_sample, 1)
+                        dst.close()
+                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
+                        dst.write(boundary_sample, 1)
+                        dst.close()
 
 
 
 if __name__ == '__main__':
-    # split_inference_samples(
-    #         tif_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/", 
-    #         sample_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/png_dataset/",
-    #         split_unit=160,
-    #         norm_mode="after_split"
-    #     )
-    split_training_samples(
-        tif_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/", 
-        area_polygon_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/data/",
-        sample_dir="/Users/wintercyan/LocalDocuments/treeseg-resource/test/png_dataset/",
-        split_unit=0
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", type=str, required=True)
+    parser.add_argument("--tif_dir", type=str, required=True)
+    parser.add_argument("--area_polygon_dir", type=str, default="")
+    parser.add_argument("--interm_png_dir", type=str, default="")
+    parser.add_argument("--sample_dir", type=str, required=True)
+    parser.add_argument("--split_unit", type=int, required=True)
+    parser.add_argument("--norm_mode", type=int, default="after_split")
+    args = parser.parse_args()
+
+
+    if args.task == "split_inference":
+        split_inference_samples(
+                tif_dir=args.tif_dir,
+                sample_dir=args.sample_dir,
+                split_unit=args.split_unit,
+                norm_mode="after_split"
+            )
+
+    if args.task == "split_train":
+        split_training_samples(
+            tif_dir=args.tif_dir,
+            area_polygon_dir=args.area_polygon_dir,
+            interm_png_dir=args.interm_png_dir,
+            sample_dir=args.sample_dir,
+            split_unit=args.split_unit,
+            norm_mode="after_split"
+        )
+
     # inference()
     # merge_results()

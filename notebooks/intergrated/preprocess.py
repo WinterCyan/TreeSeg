@@ -101,7 +101,7 @@ def readInputImages(imageBaseDir, rawImageFileType, rawNdviImagePrefix, rawPanIm
     for root, dirs, files in os.walk(imageBaseDir):
         for file in files:
             if file.endswith(rawImageFileType) and file.startswith(rawNdviImagePrefix):
-                 ndviImageFn.append(os.path.join(root, file))
+                ndviImageFn.append(os.path.join(root, file))
     panImageFn = [fn.replace(rawNdviImagePrefix, rawPanImagePrefix) for fn in ndviImageFn]
     inputImages = list(zip(ndviImageFn,panImageFn))
     return inputImages
