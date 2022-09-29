@@ -9,6 +9,7 @@ dataset preprocessing, split, (prediction), merge pipeline
 """
 
 import argparse
+from ast import arg
 import sys
 sys.path.append("/Users/wintercyan/code/TreeSeg/notebooks/")
 import numpy as np
@@ -332,7 +333,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                     dst.write(ndvi_sample, 1)
                     dst.close()
 
-def split_training_samples(tif_dir, area_polygon_dir, interm_png_dir, sample_dir, split_unit, norm_mode="after_split"):
+def preprocess_training_samples(tif_dir, area_polygon_dir, interm_png_dir, norm_mode="after_split"):
     """read tif, shp & split into training samples
 
     Args:
@@ -347,7 +348,9 @@ def split_training_samples(tif_dir, area_polygon_dir, interm_png_dir, sample_dir
     tif_dir = tif_dir.rstrip("/")
     area_polygon_dir = area_polygon_dir.rstrip("/")
     interm_png_dir = interm_png_dir.rstrip("/")
-    sample_dir = sample_dir.rstrip("/")
+
+    if not os.path.exists(interm_png_dir):
+        os.makedirs(interm_png_dir)
 
     assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
 
@@ -404,116 +407,141 @@ def split_training_samples(tif_dir, area_polygon_dir, interm_png_dir, sample_dir
 
         print("matching polygon and annotation finished.")
 
-        # read extracted png dataset, [pan, ndvi, annotation, boundary]
-        # [pan,ndvi] -> [area 0, 1, ...] -> [pan/ndvi/anno/bound 0, 1, ...] -> [pan/ndvi/anno/bound 0_r0c0, 0_r0c1, ...]
-        # a pair of tif -> multi areas   ->  multi png group (1 <-> 1 area)  ->  rows x cols square (1 <-> png group)
-        # split: pan-0.tif ...  --->  pan-0_0.png  ---> pan-0_0_r0c1.png
-        # merge: patch up split margins with 0s
-        pan_file_names = [name.replace('.png','') for name in os.listdir(interm_png_dir) if name.startswith('pan-') and name.endswith('.png')]
-        for pan_item in pan_file_names:
-            pan_dataset = rasterio.open(f"{interm_png_dir}/{pan_item}.png")
-            pan_profile = pan_dataset.profile
-            ndvi_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
-            ndvi_profile = pan_dataset.profile
-            annotation_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','annotation')}.png")
-            annotation_profile = pan_dataset.profile
-            boundary_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','boundary')}.png")
-            boundary_profile = pan_dataset.profile
+def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="after_split"):
+    # read extracted png dataset, [pan, ndvi, annotation, boundary]
+    # [pan,ndvi] -> [area 0, 1, ...] -> [pan/ndvi/anno/bound 0, 1, ...] -> [pan/ndvi/anno/bound 0_r0c0, 0_r0c1, ...]
+    # a pair of tif -> multi areas   ->  multi png group (1 <-> 1 area)  ->  rows x cols square (1 <-> png group)
+    # split: pan-0.tif ...  --->  pan-0_0.png  ---> pan-0_0_r0c1.png
+    # merge: patch up split margins with 0s
 
-            pan_profile['dtype'] = rasterio.float32
-            pan_profile['height'] = split_unit
-            pan_profile['width'] = split_unit
-            pan_profile['blockxsize'] = 32
-            pan_profile['blockysize'] = 32
-            pan_profile['count'] = 1
+    interm_png_dir = interm_png_dir.rstrip("/")
+    sample_dir = sample_dir.rstrip("/")
+    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
 
-            ndvi_profile['dtype'] = rasterio.float32
-            ndvi_profile['height'] = split_unit
-            ndvi_profile['width'] = split_unit
-            ndvi_profile['blockxsize'] = 32
-            ndvi_profile['blockysize'] = 32
-            ndvi_profile['count'] = 1
+    if not os.path.exists(sample_dir):
+        os.makedirs(sample_dir)
 
-            annotation_profile['dtype'] = rasterio.float32
-            annotation_profile['height'] = split_unit
-            annotation_profile['width'] = split_unit
-            annotation_profile['blockxsize'] = 32
-            annotation_profile['blockysize'] = 32
-            annotation_profile['count'] = 1
+    pan_file_names = [name.replace('.png','') for name in os.listdir(interm_png_dir) if name.startswith('pan-') and name.endswith('.png')]
+    for pan_item in pan_file_names:
+        print(f"spliting {pan_item}...")
+        pan_dataset = rasterio.open(f"{interm_png_dir}/{pan_item}.png")
+        pan_profile = pan_dataset.profile
+        ndvi_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
+        ndvi_profile = pan_dataset.profile
+        annotation_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','annotation')}.png")
+        annotation_profile = pan_dataset.profile
+        boundary_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','boundary')}.png")
+        boundary_profile = pan_dataset.profile
 
-            boundary_profile['dtype'] = rasterio.float32
-            boundary_profile['height'] = split_unit
-            boundary_profile['width'] = split_unit
-            boundary_profile['blockxsize'] = 32
-            boundary_profile['blockysize'] = 32
-            boundary_profile['count'] = 1
+        pan_profile['dtype'] = rasterio.float32
+        pan_profile['height'] = split_unit
+        pan_profile['width'] = split_unit
+        pan_profile['blockxsize'] = 32
+        pan_profile['blockysize'] = 32
+        pan_profile['count'] = 1
 
-            pan_img = pan_dataset.read(1).astype(pan_profile['dtype'])
-            ndvi_img = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
-            annotation_img = annotation_dataset.read(1).astype(annotation_profile['dtype'])
-            boundary_img = boundary_dataset.read(1).astype(boundary_profile['dtype'])
-            assert pan_img.shape == ndvi_img.shape == annotation_img.shape == boundary_img.shape
+        ndvi_profile['dtype'] = rasterio.float32
+        ndvi_profile['height'] = split_unit
+        ndvi_profile['width'] = split_unit
+        ndvi_profile['blockxsize'] = 32
+        ndvi_profile['blockysize'] = 32
+        ndvi_profile['count'] = 1
 
-            if norm_mode=="before_split":
-                pan_img = image_normalize(pan_img)
-                ndvi_img = image_normalize(ndvi_img)
+        annotation_profile['dtype'] = rasterio.float32
+        annotation_profile['height'] = split_unit
+        annotation_profile['width'] = split_unit
+        annotation_profile['blockxsize'] = 32
+        annotation_profile['blockysize'] = 32
+        annotation_profile['count'] = 1
 
-            height, width = pan_img.shape
-            row_count = int(height/split_unit)
-            col_count = int(width/split_unit)
-            for r in range(row_count):
-                for c in range(col_count):
-                    idx_str = f"r{r}c{c}"
-                    pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                    ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                    if norm_mode=="after_split":
-                        pan_sample = image_normalize(pan_sample)
-                        ndvi_sample = image_normalize(ndvi_sample)
-                    annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                    boundary_sample = boundary_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                    with rasterio.open(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
-                        dst.write(pan_sample, 1)
-                        dst.close()
-                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','ndvi')}-{idx_str}.png", 'w', **ndvi_profile) as dst:
-                        dst.write(ndvi_sample, 1)
-                        dst.close()
-                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','annotation')}-{idx_str}.png", 'w', **annotation_profile) as dst:
-                        dst.write(annotation_sample, 1)
-                        dst.close()
-                    with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
-                        dst.write(boundary_sample, 1)
-                        dst.close()
+        boundary_profile['dtype'] = rasterio.float32
+        boundary_profile['height'] = split_unit
+        boundary_profile['width'] = split_unit
+        boundary_profile['blockxsize'] = 32
+        boundary_profile['blockysize'] = 32
+        boundary_profile['count'] = 1
+
+        pan_img = pan_dataset.read(1).astype(pan_profile['dtype'])
+        ndvi_img = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
+        annotation_img = annotation_dataset.read(1).astype(annotation_profile['dtype'])
+        boundary_img = boundary_dataset.read(1).astype(boundary_profile['dtype'])
+        assert pan_img.shape == ndvi_img.shape == annotation_img.shape == boundary_img.shape
+
+        if norm_mode=="before_split":
+            pan_img = image_normalize(pan_img)
+            ndvi_img = image_normalize(ndvi_img)
+
+        height, width = pan_img.shape
+        row_count = int(height/split_unit)
+        col_count = int(width/split_unit)
+        for r in range(row_count):
+            for c in range(col_count):
+                idx_str = f"r{r}c{c}"
+                pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                if norm_mode=="after_split":
+                    pan_sample = image_normalize(pan_sample)
+                    ndvi_sample = image_normalize(ndvi_sample)
+                annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                boundary_sample = boundary_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                with rasterio.open(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
+                    dst.write(pan_sample, 1)
+                    dst.close()
+                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','ndvi')}-{idx_str}.png", 'w', **ndvi_profile) as dst:
+                    dst.write(ndvi_sample, 1)
+                    dst.close()
+                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','annotation')}-{idx_str}.png", 'w', **annotation_profile) as dst:
+                    dst.write(annotation_sample, 1)
+                    dst.close()
+                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
+                    dst.write(boundary_sample, 1)
+                    dst.close()
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
-    parser.add_argument("--tif_dir", type=str, required=True)
-    parser.add_argument("--area_polygon_dir", type=str, default="")
-    parser.add_argument("--interm_png_dir", type=str, default="")
-    parser.add_argument("--sample_dir", type=str, required=True)
-    parser.add_argument("--split_unit", type=int, required=True)
-    parser.add_argument("--norm_mode", type=int, default="after_split")
+    parser.add_argument("--tif_dir", type=str)
+    parser.add_argument("--area_polygon_dir", type=str)
+    parser.add_argument("--interm_png_dir", type=str)
+    parser.add_argument("--sample_dir", type=str)
+    parser.add_argument("--split_unit", type=int)
+    parser.add_argument("--norm_mode", type=str, default="after_split")
     args = parser.parse_args()
 
 
-    if args.task == "split_inference":
-        split_inference_samples(
-                tif_dir=args.tif_dir,
-                sample_dir=args.sample_dir,
-                split_unit=args.split_unit,
-                norm_mode="after_split"
-            )
+    # if args.task == "split_inference":
+    #     assert args.tif_dir is not None, "please set tif_dir arg!"
+    #     assert args.area_polygon_dir is not None, "please set area_polygon_dir arg!"
+    #     assert args.interm_png_dir is not None, "please set interm_png_dir arg!"
+    #     split_inference_samples(
+    #             tif_dir=args.tif_dir,
+    #             sample_dir=args.sample_dir,
+    #             split_unit=args.split_unit,
+    #             norm_mode=args.norm_mode
+    #         )
 
-    if args.task == "split_train":
-        split_training_samples(
+    if args.task == "preprocess_train":
+        assert args.tif_dir is not None, "please set tif_dir arg!"
+        assert args.area_polygon_dir is not None, "please set area_polygon_dir arg!"
+        assert args.interm_png_dir is not None, "please set interm_png_dir arg!"
+        preprocess_training_samples(
             tif_dir=args.tif_dir,
             area_polygon_dir=args.area_polygon_dir,
             interm_png_dir=args.interm_png_dir,
+            norm_mode=args.norm_mode
+        )
+
+    if args.task == "split_train":
+        assert args.interm_png_dir is not None, "please set interm_png_dir arg!"
+        assert args.sample_dir is not None, "please set sample_dir arg!"
+        assert args.split_unit is not None, "please set split_unit arg!"
+        split_training_samples(
+            interm_png_dir=args.interm_png_dir,
             sample_dir=args.sample_dir,
             split_unit=args.split_unit,
-            norm_mode="after_split"
+            norm_mode=args.norm_mode
         )
 
     # inference()
