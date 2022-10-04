@@ -11,7 +11,7 @@ dataset preprocessing, split, (prediction), merge pipeline
 import argparse
 from ast import arg
 import sys
-sys.path.append("/Users/wintercyan/code/TreeSeg/notebooks/")
+sys.path.append("/home/winter/code/TreeSeg/notebooks/")
 import numpy as np
 import rasterio
 import os
@@ -87,8 +87,7 @@ def dividePolygonsInTrainingAreas(trainingPolygon, trainingArea, print_polygon_n
 
     # ---------------------- counting polygons number ----------------------
     if print_polygon_num:
-        print("counting polygons in areas...")
-        for i in trainingArea.index:
+        for i in tqdm(trainingArea.index, desc="counting polygons in areas"):
             polygon_count = 0
             for j in cpTrainingPolygon.index:
                 if trainingArea.loc[i]['geometry'].intersects(cpTrainingPolygon.loc[j]['geometry']):
@@ -122,6 +121,7 @@ def readInputImages(imageBaseDir, rawImageFileType, rawNdviImagePrefix, rawPanIm
             if file.endswith(rawImageFileType) and file.startswith(rawNdviImagePrefix):
                  ndviImageFn.append(os.path.join(root, file))
     panImageFn = [fn.replace(rawNdviImagePrefix, rawPanImagePrefix) for fn in ndviImageFn]
+    print(panImageFn)
     inputImages = list(zip(ndviImageFn,panImageFn))
     return inputImages
 
@@ -332,7 +332,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                     dst.write(ndvi_sample, 1)
                     dst.close()
 
-def preprocess_training_samples(tif_dir, area_polygon_dir, interm_png_dir, norm_mode="after_split"):
+def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_png_dir, norm_mode="after_split"):
     """read tif, shp & split into training samples
 
     Args:
@@ -383,7 +383,10 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, interm_png_dir, norm_
 
         areas['id'] = range(areas.shape[0])
         # ------------- for test -------------
-        areas = areas[2:3][:]
+        if area_range != "all":
+            begin_idx = int(area_range.split("-")[0])
+            end_idx = int(area_range.split("-")[1])
+            areas = areas[begin_idx:end_idx][:]
         # ------------- for test -------------
         areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
         print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
@@ -422,7 +425,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
 
     pan_file_names = [name.replace('.png','') for name in os.listdir(interm_png_dir) if name.startswith('pan-') and name.endswith('.png')]
     for pan_item in pan_file_names:
-        print(f"spliting {pan_item}...")
+        print(f"spliting {pan_item} by {split_unit} pixel...")
         pan_dataset = rasterio.open(f"{interm_png_dir}/{pan_item}.png")
         pan_profile = pan_dataset.profile
         ndvi_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
@@ -503,6 +506,7 @@ if __name__ == '__main__':
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--tif_dir", type=str)
     parser.add_argument("--area_polygon_dir", type=str)
+    parser.add_argument("--area_range", type=str)
     parser.add_argument("--interm_png_dir", type=str)
     parser.add_argument("--sample_dir", type=str)
     parser.add_argument("--split_unit", type=int)
@@ -524,10 +528,12 @@ if __name__ == '__main__':
     if args.task == "preprocess_train":
         assert args.tif_dir is not None, "please set tif_dir arg!"
         assert args.area_polygon_dir is not None, "please set area_polygon_dir arg!"
+        assert args.area_range is not None, "please set area_range arg!"
         assert args.interm_png_dir is not None, "please set interm_png_dir arg!"
         preprocess_training_samples(
             tif_dir=args.tif_dir,
             area_polygon_dir=args.area_polygon_dir,
+            area_range=args.area_range,
             interm_png_dir=args.interm_png_dir,
             norm_mode=args.norm_mode
         )
