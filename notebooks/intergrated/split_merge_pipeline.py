@@ -25,7 +25,6 @@ from shapely.geometry import box
 import json
 import PIL.ImageDraw
 from PIL import Image
-from core.frame_info import image_normalize
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import warnings
