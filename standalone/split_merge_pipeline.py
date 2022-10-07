@@ -119,7 +119,7 @@ def readInputImages(imageBaseDir, rawImageFileType, rawNdviImagePrefix, rawPanIm
     for root, dirs, files in os.walk(imageBaseDir):
         for file in files:
             if file.endswith(rawImageFileType) and file.startswith(rawNdviImagePrefix):
-                 ndviImageFn.append(os.path.join(root, file))
+                ndviImageFn.append(os.path.join(root, file))
     panImageFn = [fn.replace(rawNdviImagePrefix, rawPanImagePrefix) for fn in ndviImageFn]
     print(panImageFn)
     inputImages = list(zip(ndviImageFn,panImageFn))
@@ -386,6 +386,7 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         if area_range != "all":
             begin_idx = int(area_range.split("-")[0])
             end_idx = int(area_range.split("-")[1])
+            assert begin_idx<=end_idx, "begin idx > end_idx!"
             areas = areas[begin_idx:end_idx][:]
         # ------------- for test -------------
         areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
@@ -394,7 +395,7 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         input_imgs = readInputImages(tif_dir, ".tif", "ndvi-", "pan-")
         print(f'found a total of {len(input_imgs)} pair of raw images to process!')
 
-        write_counter = 0
+        write_counter = begin_idx
         extractAreasThatOverlapWithTrainingData(
             inputImages=input_imgs,
             areasWithPolygons=areas_with_polygons,
