@@ -85,7 +85,7 @@ def cut_area(fn, source_dir, mean_thr=0.1):
                     #     load_npy = np.load("/home/winter/Desktop/1.npy")
                     #     plt.imshow(load_npy)
                     #     # load_img = np.array(temp_img)
-                #resize_arr = zoom(square_img[k], (256/SPLIT_UNIT, 256/SPLIT_UNIT))
+                resize_arr = zoom(square_img[k], (256/SPLIT_UNIT, 256/SPLIT_UNIT))
                 np.save(dataset_dir+f"{fn}_{idx}_{TYPE_ENUM[k]}.npy",square_img[k])
     plt.show()
 

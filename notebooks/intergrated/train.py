@@ -150,10 +150,10 @@ model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dic
 model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, accuracy, specificity, sensitivity])
 
 # Print one batch on the training/test data!
-for i in range(1):
-    test_images, real_label = next(test_generator)
-    #5 images per row: pan, ndvi, label, weight, prediction
-    prediction = model.predict(test_images, steps=1)
-    prediction[prediction>0.5]=1
-    prediction[prediction<=0.5]=0
-    display_images(np.concatenate((test_images, real_label, prediction), axis = -1))
+# for i in range(1):
+#     test_images, real_label = next(test_generator)
+#     #5 images per row: pan, ndvi, label, weight, prediction
+#     prediction = model.predict(test_images, steps=1)
+#     prediction[prediction>0.5]=1
+#     prediction[prediction<=0.5]=0
+#     display_images(np.concatenate((test_images, real_label, prediction), axis = -1))

@@ -24,6 +24,6 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
             plt.axis('off')
             #plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
             if save:
-                plt.imsave(fname=f"{dir}/disp{cmap}{norm}_{i}{j}.png", arr=img[i,...,j])
+                plt.imsave(fname=f"{dir}/disp_{cmap}_{i}{j}.png", arr=img[i,...,j])
     #plt.show()
 
