@@ -9,7 +9,8 @@ class Configuration:
     Copy the config folder and define the paths to input and output data. Variables such as raw_ndvi_image_prefix may also need to be corrected if you are use a different source.
     '''
     def __init__(self, folder, area_patt="training_area", poly_patt="training_polygon"):
-        rootdir = f"/home/winter/code-resources/treeseg/{folder}/"
+        rootdir = f"/Users/wintercyan/LocalDocuments/treeseg-resource/{folder}/"
+        # rootdir = f"/Users/wintercyan/LocalDocuments/treeseg-resource/full_area/"
         # For reading the training areas and polygons
         self.training_base_dir = rootdir+"data"
         self.training_area_fn = f'{area_patt}.shp'
