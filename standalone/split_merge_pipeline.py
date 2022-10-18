@@ -388,6 +388,8 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
             end_idx = int(area_range.split("-")[1])
             assert begin_idx<=end_idx, "begin idx > end_idx!"
             areas = areas[begin_idx:end_idx][:]
+        else:
+            begin_idx = 0
         # ------------- for test -------------
         areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
         print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
