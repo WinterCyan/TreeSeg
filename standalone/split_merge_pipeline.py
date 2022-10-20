@@ -9,9 +9,6 @@ dataset preprocessing, split, (prediction), merge pipeline
 """
 
 import argparse
-from ast import arg
-import sys
-sys.path.append("/home/winter/code/TreeSeg/notebooks/")
 import numpy as np
 import rasterio
 import os
@@ -178,6 +175,7 @@ def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundar
             dt = sm[0][band].astype(profile['dtype'])
             if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
                 dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
+            print(f"writing {imFn}-area{writeCounter}.png ...")
             with rasterio.open(os.path.join(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
                     dst.write(dt, 1) 
         if annotationFilename:
@@ -266,6 +264,9 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
 
     assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
 
+    if not os.path.exists(sample_dir):
+        os.makedirs(sample_dir)
+
     tif_dir = tif_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
     all_pan_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("pan") or name.__contains__("PAN")) and name.endswith(".tif")]
@@ -330,6 +331,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                     dst.close()
                 with rasterio.open(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
                     dst.write(ndvi_sample, 1)
+                    print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
                     dst.close()
 
 def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_png_dir, norm_mode="after_split"):
@@ -515,16 +517,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    # if args.task == "split_inference":
-    #     assert args.tif_dir is not None, "please set tif_dir arg!"
-    #     assert args.area_polygon_dir is not None, "please set area_polygon_dir arg!"
-    #     assert args.interm_png_dir is not None, "please set interm_png_dir arg!"
-    #     split_inference_samples(
-    #             tif_dir=args.tif_dir,
-    #             sample_dir=args.sample_dir,
-    #             split_unit=args.split_unit,
-    #             norm_mode=args.norm_mode
-    #         )
+    if args.task == "split_inference":
+        assert args.tif_dir is not None, "please set tif_dir arg!"
+        assert args.sample_dir is not None, "please set sample_dir arg!"
+        split_inference_samples(
+                tif_dir=args.tif_dir,
+                sample_dir=args.sample_dir,
+                split_unit=args.split_unit,
+                norm_mode=args.norm_mode
+            )
 
     if args.task == "preprocess_train":
         assert args.tif_dir is not None, "please set tif_dir arg!"
