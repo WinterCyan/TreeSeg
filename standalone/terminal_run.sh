@@ -6,6 +6,7 @@
 
 data_root="/home/lenovo/treeseg-dataset/preprocess/1014/predict"
 
+# -------------------------- preprocess --------------------------
 # python3 split_merge_pipeline.py \
 #    --task preprocess_train \
 #    --tif_dir $data_root/tif \
@@ -13,6 +14,8 @@ data_root="/home/lenovo/treeseg-dataset/preprocess/1014/predict"
 #    --area_range 3-4 \
 #    --interm_png_dir $data_root/interm_png
 #
+
+# -------------------------- split train --------------------------
 # python3 split_merge_pipeline.py \
 #     --task split_train \
 #     --interm_png_dir $data_root/interm_png \
@@ -34,20 +37,28 @@ data_root="/home/lenovo/treeseg-dataset/preprocess/1014/predict"
 #     --split_unit 108 \
 #     --norm_mode after_split
 
-python3 split_merge_pipeline.py \
-    --task split_inference \
-    --tif_dir $data_root/tif \
-    --sample_dir $data_root/inference_sample_256 \
-    --split_unit 256
+# -------------------------- split inference --------------------------
+# python3 split_merge_pipeline.py \
+#     --task split_inference \
+#     --tif_dir $data_root/tif \
+#     --sample_dir $data_root/inference_sample_256 \
+#     --split_unit 256
 
-python3 split_merge_pipeline.py \
-    --task split_inference \
-    --tif_dir $data_root/tif \
-    --sample_dir $data_root/inference_sample_108 \
-    --split_unit 108
+# python3 split_merge_pipeline.py \
+#     --task split_inference \
+#     --tif_dir $data_root/tif \
+#     --sample_dir $data_root/inference_sample_108 \
+#     --split_unit 108
 
 # python3 split_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
 #     --sample_dir $data_root/inference_sample_160 \
 #     --split_unit 160
+
+# -------------------------- inference --------------------------
+python3 split_merge_pipeline.py \
+    --task inference \
+    --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model.h5 \
+    --sample_dir $data_root/inference_sample_108 \
+    --result_dir $data_root/inference_result_108 \

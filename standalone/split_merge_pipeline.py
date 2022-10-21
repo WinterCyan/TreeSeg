@@ -11,7 +11,9 @@ dataset preprocessing, split, (prediction), merge pipeline
 import argparse
 import numpy as np
 import rasterio
+from rasterio import open as rstopen
 import os
+from os.path import join as pjoin
 import rasterio.mask
 import rasterio.warp
 import rasterio.merge
@@ -24,8 +26,17 @@ import PIL.ImageDraw
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+# from tensorflow.keras.optimizers import Adam, Adadelta, Adagrad, Nadam
+from tensorflow.keras.models import load_model
 import warnings
+from losses import *
+from optimizers import *
 warnings.filterwarnings("ignore")
+
+# adaDelta = Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
+# adam = Adam(lr= 5.0e-05, decay= 0.0, beta_1= 0.9, beta_2= 0.999, epsilon= 1.0e-8)
+# nadam = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+# adagrad = Adagrad(lr=0.01, epsilon=None, decay=0.0)
 
 def image_normalize(im, axis = (0,1), c = 1e-8):
     return (im - im.mean(axis)) / (im.std(axis) + c)
@@ -116,7 +127,7 @@ def readInputImages(imageBaseDir, rawImageFileType, rawNdviImagePrefix, rawPanIm
     for root, dirs, files in os.walk(imageBaseDir):
         for file in files:
             if file.endswith(rawImageFileType) and file.startswith(rawNdviImagePrefix):
-                ndviImageFn.append(os.path.join(root, file))
+                ndviImageFn.append(pjoin(root, file))
     panImageFn = [fn.replace(rawNdviImagePrefix, rawPanImagePrefix) for fn in ndviImageFn]
     print(panImageFn)
     inputImages = list(zip(ndviImageFn,panImageFn))
@@ -160,7 +171,7 @@ def rowColPolygons(areaDf, areaShape, profile, filename, outline, fill):
         json.dump({'Trees': polygons}, outfile)
     mask = drawPolygons(polygons,areaShape, outline=outline, fill=fill)    
     profile['dtype'] = rasterio.int16
-    with rasterio.open(filename.replace('json', 'png'), 'w', **profile) as dst:
+    with rstopen(filename.replace('json', 'png'), 'w', **profile) as dst:
         dst.write(mask.astype(rasterio.int16), 1)
 
 def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter, normalize=True):
@@ -176,14 +187,14 @@ def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundar
             if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
                 dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
             print(f"writing {imFn}-area{writeCounter}.png ...")
-            with rasterio.open(os.path.join(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
+            with rstopen(pjoin(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
                     dst.write(dt, 1) 
         if annotationFilename:
-            annotation_json_filepath = os.path.join(writePath,annotationFilename+'-area{}.json'.format(writeCounter))
+            annotation_json_filepath = pjoin(writePath,annotationFilename+'-area{}.json'.format(writeCounter))
             # The object is given a value of 1, the outline or the border of the object is given a value of 0 and rest of the image/background is given a a value of 0
             rowColPolygons(polygonsInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, annotation_json_filepath, outline=0, fill = 1)
         if boundaryFilename:
-            boundary_json_filepath = os.path.join(writePath,boundaryFilename+'-area{}.json'.format(writeCounter))
+            boundary_json_filepath = pjoin(writePath,boundaryFilename+'-area{}.json'.format(writeCounter))
             # The boundaries are given a value of 1, the outline or the border of the boundaries is also given a value of 1 and rest is given a value of 0
             rowColPolygons(boundariesInAreaDf,(sm[0].shape[1], sm[0].shape[2]), profile, boundary_json_filepath, outline=1 , fill=1)
         return(writeCounter+1)
@@ -232,8 +243,8 @@ def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writ
         
     overlapppedAreas = set()                   
     for imgs in tqdm(inputImages, desc="read tif images"):
-        ndviImg = rasterio.open(imgs[0])
-        panImg = rasterio.open(imgs[1])
+        ndviImg = rstopen(imgs[0])
+        panImg = rstopen(imgs[1])
 
         ncpan, imOverlapppedAreasPan = findOverlap(panImg, areasWithPolygons, writePath=writePath, imageFilename=[panFilename], annotationFilename=annotationFilename, boundaryFilename=boundaryFilename, bands=bands, writeCounter=writeCounter )
         ncndvi,imOverlapppedAreasNdvi = findOverlap(ndviImg, areasWithPolygons, writePath=writePath, imageFilename=[ndviFilename], annotationFilename=annotationFilename, boundaryFilename=boundaryFilename, bands=bands, writeCounter=writeCounter)
@@ -285,9 +296,9 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         ndvi_full_path = f"{tif_dir}/{ndvi_item}"
         print(pan_full_path, ndvi_full_path)
 
-        pan_dataset = rasterio.open(pan_full_path)
+        pan_dataset = rstopen(pan_full_path)
         pan_profile = pan_dataset.profile
-        ndvi_dataset = rasterio.open(ndvi_full_path)
+        ndvi_dataset = rstopen(ndvi_full_path)
         ndvi_profile = ndvi_dataset.profile
 
         pan_profile['dtype'] = rasterio.float32
@@ -324,12 +335,12 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                 if norm_mode=="after_split":
                     pan_sample = image_normalize(pan_sample)
                     ndvi_sample = image_normalize(ndvi_sample)
-                with rasterio.open(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
+                with rstopen(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
                     dst.write(pan_sample, 1)
                     print(pan_sample.shape)
                     print(f"max: {np.max(pan_sample)}, min: {np.min(pan_sample)}")
                     dst.close()
-                with rasterio.open(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
+                with rstopen(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
                     dst.write(ndvi_sample, 1)
                     print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
                     dst.close()
@@ -429,13 +440,13 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
     pan_file_names = [name.replace('.png','') for name in os.listdir(interm_png_dir) if name.startswith('pan-') and name.endswith('.png')]
     for pan_item in pan_file_names:
         print(f"spliting {pan_item} by {split_unit} pixel...")
-        pan_dataset = rasterio.open(f"{interm_png_dir}/{pan_item}.png")
+        pan_dataset = rstopen(f"{interm_png_dir}/{pan_item}.png")
         pan_profile = pan_dataset.profile
-        ndvi_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
+        ndvi_dataset = rstopen(f"{interm_png_dir}/{pan_item.replace('pan','ndvi')}.png")
         ndvi_profile = pan_dataset.profile
-        annotation_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','annotation')}.png")
+        annotation_dataset = rstopen(f"{interm_png_dir}/{pan_item.replace('pan','annotation')}.png")
         annotation_profile = pan_dataset.profile
-        boundary_dataset = rasterio.open(f"{interm_png_dir}/{pan_item.replace('pan','boundary')}.png")
+        boundary_dataset = rstopen(f"{interm_png_dir}/{pan_item.replace('pan','boundary')}.png")
         boundary_profile = pan_dataset.profile
 
         pan_profile['dtype'] = rasterio.float32
@@ -489,18 +500,48 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                     ndvi_sample = image_normalize(ndvi_sample)
                 annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 boundary_sample = boundary_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                with rasterio.open(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
+                with rstopen(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
                     dst.write(pan_sample, 1)
                     dst.close()
-                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','ndvi')}-{idx_str}.png", 'w', **ndvi_profile) as dst:
+                with rstopen(f"{sample_dir}/{pan_item.replace('pan','ndvi')}-{idx_str}.png", 'w', **ndvi_profile) as dst:
                     dst.write(ndvi_sample, 1)
                     dst.close()
-                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','annotation')}-{idx_str}.png", 'w', **annotation_profile) as dst:
+                with rstopen(f"{sample_dir}/{pan_item.replace('pan','annotation')}-{idx_str}.png", 'w', **annotation_profile) as dst:
                     dst.write(annotation_sample, 1)
                     dst.close()
-                with rasterio.open(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
+                with rstopen(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
                     dst.write(boundary_sample, 1)
                     dst.close()
+
+def model_inference(model_path, sample_dir, result_dir):
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+
+    # OPTIMIZER = adaDelta
+    LOSS = tversky 
+
+    # OPTIMIZER_NAME = 'AdaDelta'
+    # LOSS_NAME = 'weightmap_tversky'
+    model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
+    pan_full_names = [pjoin(sample_dir,n) for n in os.listdir(sample_dir) if (n.endswith(".png") and n.__contains__('pan'))]
+
+
+    for fn in tqdm(pan_full_names):
+        basename = os.path.basename(fn)
+        pan_img_fn = fn
+        ndvi_img_fn = fn.replace('pan', 'ndvi')
+        pan_img = Image.open(pan_img_fn).resize((256,256))
+        ndvi_img = Image.open(ndvi_img_fn).resize((256,256))
+        pan_arr = np.array(pan_img)
+        ndvi_arr = np.array(ndvi_img)
+        comb_img = np.transpose(np.stack((ndvi_arr, pan_arr),axis=0))
+        expand_img = comb_img[np.newaxis, :]
+        prediction = model.predict(expand_img, steps=1)
+        prediction[prediction>0.5]=1
+        prediction[prediction<=0.5]=0
+        prediction = np.squeeze(prediction)
+        seg_map = Image.fromarray((prediction*255).astype(np.uint8))
+        seg_map.save(pjoin(result_dir, basename.replace('pan','segmap')))
 
 
 
@@ -512,6 +553,8 @@ if __name__ == '__main__':
     parser.add_argument("--area_range", type=str)
     parser.add_argument("--interm_png_dir", type=str)
     parser.add_argument("--sample_dir", type=str)
+    parser.add_argument("--model_path", type=str)
+    parser.add_argument("--result_dir", type=str)
     parser.add_argument("--split_unit", type=int)
     parser.add_argument("--norm_mode", type=str, default="after_split")
     args = parser.parse_args()
@@ -549,6 +592,16 @@ if __name__ == '__main__':
             sample_dir=args.sample_dir,
             split_unit=args.split_unit,
             norm_mode=args.norm_mode
+        )
+
+    if args.task == "inference":
+        assert args.model_path is not None, "please set model_path arg!"
+        assert args.sample_dir is not None, "please set sample_dir arg!"
+        assert args.result_dir is not None, "please set result_dir arg!"
+        model_inference(
+            model_path=args.model_path,
+            sample_dir=args.sample_dir,
+            result_dir=args.result_dir,
         )
 
     # inference()
