@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/winter/TreeSegment/An-unexpectedly-large-count-of-trees-in-the-western-Sahara-and-Sahel-v1.0.0/notebooks/")
+sys.path.append("/home/lenovo/code/TreeSeg/notebooks/")
 import rasterio                  # I/O raster data (netcdf, height, geotiff, ...)
 import rasterio.mask
 import rasterio.warp             # Reproject raster samples
@@ -25,7 +25,7 @@ import warnings                  # ignore annoying warnings
 warnings.filterwarnings("ignore")
 from IPython.core.interactiveshell import InteractiveShell
 InteractiveShell.ast_node_interactivity = "all"
-from config import Preprocessing
+from configx import Preprocessing
 
 
 def calculateBoundaryWeight(polygonsInArea, scale_polygon = 1.5, output_plot = True): 
