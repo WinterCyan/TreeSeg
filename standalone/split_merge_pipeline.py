@@ -544,6 +544,52 @@ def model_inference(model_path, sample_dir, result_dir):
         seg_map.save(pjoin(result_dir, basename.replace('pan','segmap')))
 
 
+def get_row_col(name:str):
+    rc_str = name.split('-')[0]
+    row_col = rc_str.replace('r', ' ').replace('c', ' ').split()
+    row_col_int = (int(row_col[0]), int(row_col[1]))
+    assert len(row_col_int) == 2
+    return row_col_int
+
+    
+def result_merge(result_dir, map_size, save_dir):
+    names = [os.path.basename(n) for n in os.listdir(result_dir) if n.endswith('.png')]
+    
+    row_col_idx_list = [get_row_col(n) for n in names]
+    max_row = max([idx[0] for idx in row_col_idx_list])+1
+    max_col = max([idx[1] for idx in row_col_idx_list])+1
+    print(f"merging from {max_row}x{max_col} seg maps...")
+
+    (total_heith, total_width) = (map_size*max_row, map_size*max_col)
+    total_map_arr = np.zeros((total_heith, total_width))
+
+    for n in tqdm(names):
+        img_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
+        (row, col) = get_row_col(n)
+        total_map_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = img_arr
+
+    # print(f"total map arr: {total_map_arr.shape}, {type(total_map_arr)}, {np.unique(total_map_arr)}")
+    print("saving total map...")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    total_map = Image.fromarray(total_map_arr.astype(np.uint8))
+    total_map.save(pjoin(save_dir, "merge_result.png"))
+
+    # partial_map_arr = total_map_arr[15000:16000, 15000:17000]
+    print("saving partial maps...")
+    grid = 5000
+    for i in range(0, int(total_heith/grid)):
+        for j in range(0, int(total_width/grid)):
+            partial_map_arr = total_map_arr[grid*i:grid*i+1000, grid*j:grid*j+2000]
+            partial_map = Image.fromarray(partial_map_arr.astype(np.uint8))
+            partial_map.save(pjoin(save_dir, f"merge_result_partial{i}-{j}.png"))
+
+    # for r in range(0, max_row):
+    #     for c in range(0, max_col):
+    #         img = Image.open(pjoin(result_dir))
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -555,6 +601,7 @@ if __name__ == '__main__':
     parser.add_argument("--sample_dir", type=str)
     parser.add_argument("--model_path", type=str)
     parser.add_argument("--result_dir", type=str)
+    parser.add_argument("--merge_dir", type=str)
     parser.add_argument("--split_unit", type=int)
     parser.add_argument("--norm_mode", type=str, default="after_split")
     args = parser.parse_args()
@@ -602,6 +649,16 @@ if __name__ == '__main__':
             model_path=args.model_path,
             sample_dir=args.sample_dir,
             result_dir=args.result_dir,
+        )
+
+    if args.task == "merge":
+        assert args.result_dir is not None, "please set result_dir arg!"
+        assert args.split_unit is not None, "please set split_unit arg!"
+        assert args.merge_dir is not None, "please set merge_dir arg!"
+        result_merge(
+            result_dir=args.result_dir,
+            map_size=args.split_unit,
+            save_dir=args.merge_dir
         )
 
     # inference()
