@@ -48,6 +48,7 @@ from configx import UNetTraining
 config = UNetTraining.Configuration()
 
 base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128"
+# base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
 
 
 print(config.base_dir)
@@ -57,17 +58,23 @@ frames = []
 
 all_files = os.listdir(config.base_dir)
 
+def load_img_method(path:str,format:str):
+    if format == 'png':
+        return np.asarray(Image.open(path))
+    if format == 'npy':
+        return np.load(path)
+
 # load all ndvi*.png
 all_files_ndvi = [fn for fn in all_files if fn.startswith(config.ndvi_fn) and fn.endswith(config.image_type)]
 len(all_files_ndvi)
 for i, fn in enumerate(all_files_ndvi):
-    ndvi_img = np.load(os.path.join(config.base_dir, fn))
-    pan_img = np.load(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.pan_fn)))
+    ndvi_img = load_img_method(os.path.join(config.base_dir, fn), "png")
+    pan_img = load_img_method(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.pan_fn)), "png")
     comb_img = np.stack((ndvi_img, pan_img), axis=0)
     comb_img = np.transpose(comb_img, axes=(1,2,0)) #Channel at the end
 
-    annotation_img = np.load(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.annotation_fn)))
-    weight_img = np.load(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.weight_fn)))
+    annotation_img = load_img_method(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.annotation_fn)), "png")
+    weight_img = load_img_method(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.weight_fn)), "png")
     f = FrameInfo(comb_img, annotation_img, weight_img)
     frames.append(f)
 
@@ -143,15 +150,15 @@ loss_history = [model.fit(train_generator,
 # Load model after training
 # If you load a model with different python version, than you may run into a problem: https://github.com/keras-team/keras/issues/9595#issue-303471777
 
-model_path = "./saved_models/UNet/trees_20220816-1711_AdaDelta_weightmap_tversky_012_256.h5"
+# model_path = "./saved_models/UNet/trees_20220816-1711_AdaDelta_weightmap_tversky_012_256.h5"
 
-model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
+# model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
 
-# In case you want to use multiple GPU you can uncomment the following lines.
-# from tensorflow.python.keras.utils import multi_gpu_model
-# model = multi_gpu_model(model, gpus=2, cpu_merge=False)
+# # In case you want to use multiple GPU you can uncomment the following lines.
+# # from tensorflow.python.keras.utils import multi_gpu_model
+# # model = multi_gpu_model(model, gpus=2, cpu_merge=False)
 
-model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, accuracy, specificity, sensitivity])
+# model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, accuracy, specificity, sensitivity])
 
 # Print one batch on the training/test data!
 # for i in range(1):
