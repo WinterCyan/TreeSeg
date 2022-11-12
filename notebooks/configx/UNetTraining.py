@@ -6,14 +6,13 @@ class Configuration:
         # Initialize the data related variables used in the notebook
         # For reading the ndvi, pan and annotated images generated in the Preprocessing step.
         # In most cases, they will take the same value as in the config/Preprocessing.py
-        self.base_dir = "/media/lenovo/Elements SE/predict/predict1/"
-        # self.base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
-        # self.image_type = '.png'
-        self.image_type = '.npy'
+
+        self.base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128"
+        self.image_type = '.png'
         self.ndvi_fn = 'ndvi'
         self.pan_fn = 'pan'
         self.annotation_fn = 'annotation'
-        self.weight_fn = 'weight'
+        self.weight_fn = 'boundary'
         
         # Patch generation; from the training areas (extracted in the last notebook), we generate fixed size patches.
         # random: a random training area is selected and a patch in extracted from a random location inside that training area. Uses a lazy stratergy i.e. batch of patches are extracted on demand.

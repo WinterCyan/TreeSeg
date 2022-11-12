@@ -41,7 +41,7 @@ InteractiveShell.ast_node_interactivity = "all"
 print(tf.__version__)
 print(tf.config.list_physical_devices())
 
-from config import UNetTraining
+from configx import UNetTraining
 # In case you are using a different folder name such as configLargeCluster, then you should import from the respective folder 
 # Eg. from configLargeCluster import UNetTraining
 config = UNetTraining.Configuration()
@@ -127,14 +127,14 @@ tensorboard = TensorBoard(log_dir=log_dir, histogram_freq=0, write_graph=True, w
 callbacks_list = [checkpoint, tensorboard] #reduceLROnPlat is not required with adaDelta
 
 loss_history = [model.fit(train_generator, 
-                         steps_per_epoch=config.MAX_TRAIN_STEPS, 
-                         epochs=config.NB_EPOCHS, 
-                         validation_data=val_generator,
-                         validation_steps=config.VALID_IMG_COUNT,
-                         callbacks=callbacks_list,
-                         workers=1,
+                        steps_per_epoch=config.MAX_TRAIN_STEPS, 
+                        epochs=config.NB_EPOCHS, 
+                        validation_data=val_generator,
+                        validation_steps=config.VALID_IMG_COUNT,
+                        callbacks=callbacks_list,
+                        workers=1,
 #                         use_multiprocessing=True # the generator is not very thread safe
-                        )]
+                    )]
 
 # Load model after training
 # If you load a model with different python version, than you may run into a problem: https://github.com/keras-team/keras/issues/9595#issue-303471777

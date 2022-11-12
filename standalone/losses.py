@@ -17,8 +17,6 @@ def tversky(y_true, y_pred, alpha=0.6, beta=0.4):
     :return: the loss
     """
     
-    # --------------------------- wintercyan comment ---------------------------
-    # weight usage: calculate weighted-tversky loss
     y_t = y_true[...,0]
     y_t = y_t[...,np.newaxis]
     # weights
