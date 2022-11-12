@@ -132,3 +132,6 @@ dmypy.json
 saved_models/
 logs/
 patches256/
+
+# for macos
+.DS_Store
