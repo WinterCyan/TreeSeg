@@ -41,10 +41,14 @@ InteractiveShell.ast_node_interactivity = "all"
 print(tf.__version__)
 print(tf.config.list_physical_devices())
 
-from config import UNetTraining
+from configx import UNetTraining
 # In case you are using a different folder name such as configLargeCluster, then you should import from the respective folder 
 # Eg. from configLargeCluster import UNetTraining
+
 config = UNetTraining.Configuration()
+
+base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128"
+
 
 print(config.base_dir)
 

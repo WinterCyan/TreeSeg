@@ -560,8 +560,8 @@ def result_merge(result_dir, map_size, save_dir):
     max_col = max([idx[1] for idx in row_col_idx_list])+1
     print(f"merging from {max_row}x{max_col} seg maps...")
 
-    (total_heith, total_width) = (map_size*max_row, map_size*max_col)
-    total_map_arr = np.zeros((total_heith, total_width))
+    (total_height, total_width) = (map_size*max_row, map_size*max_col)
+    total_map_arr = np.zeros((total_height, total_width))
 
     for n in tqdm(names):
         img_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
@@ -575,12 +575,13 @@ def result_merge(result_dir, map_size, save_dir):
     total_map = Image.fromarray(total_map_arr.astype(np.uint8))
     total_map.save(pjoin(save_dir, "merge_result.png"))
 
-    # partial_map_arr = total_map_arr[15000:16000, 15000:17000]
+    # total_map_arr = np.array(Image.open(pjoin(save_dir, "merge_result.png")))
+    # (total_height, total_width) = total_map_arr.shape
     print("saving partial maps...")
     grid = 5000
-    for i in range(0, int(total_heith/grid)):
+    for i in range(0, int(total_height/grid)):
         for j in range(0, int(total_width/grid)):
-            partial_map_arr = total_map_arr[grid*i:grid*i+1000, grid*j:grid*j+2000]
+            partial_map_arr = total_map_arr[grid*i:grid*i+3000, grid*j:grid*j+5000]
             partial_map = Image.fromarray(partial_map_arr.astype(np.uint8))
             partial_map.save(pjoin(save_dir, f"merge_result_partial{i}-{j}.png"))
 

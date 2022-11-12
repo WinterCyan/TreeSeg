@@ -4,11 +4,12 @@
 # except Exception:
 #     return []
 
-data_root="/home/lenovo/treeseg-dataset/preprocess/all"
+data_root="/home/lenovo/treeseg-dataset/full_process"
 
-python3 split_merge_pipeline.py \
+# -------------------------- preprocess --------------------------
+python3 -W ignore split_merge_pipeline.py \
     --task preprocess_train \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
-    --area_range 80-100 \
+    --area_range 120-150 \
     --interm_png_dir $data_root/interm_png

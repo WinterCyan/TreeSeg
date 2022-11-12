@@ -4,38 +4,38 @@
 # except Exception:
 #     return []
 
-data_root="/home/lenovo/treeseg-dataset/preprocess/1014/predict"
+data_root="/home/lenovo/treeseg-dataset/full_process"
 
 # -------------------------- preprocess --------------------------
-# python3 split_merge_pipeline.py \
-#    --task preprocess_train \
-#    --tif_dir $data_root/tif \
-#    --area_polygon_dir $data_root/shp \
-#    --area_range 3-4 \
-#    --interm_png_dir $data_root/interm_png
-#
+# python3 -W ignore split_merge_pipeline.py \
+#     --task preprocess_train \
+#     --tif_dir $data_root/tif \
+#     --area_polygon_dir $data_root/shp \
+#     --area_range  \
+#     --interm_png_dir $data_root/interm_png
+
 
 # -------------------------- split train --------------------------
-# python3 split_merge_pipeline.py \
-#     --task split_train \
-#     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/sample_256 \
-#     --split_unit 256 \
-#     --norm_mode after_split
+python3 split_merge_pipeline.py \
+    --task split_train \
+    --interm_png_dir $data_root/interm_png \
+    --sample_dir $data_root/sample_256 \
+    --split_unit 256 \
+    --norm_mode after_split
 
-# python3 split_merge_pipeline.py \
-#     --task split_train \
-#     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/sample_128 \
-#     --split_unit 128 \
-#     --norm_mode after_split
+python3 split_merge_pipeline.py \
+    --task split_train \
+    --interm_png_dir $data_root/interm_png \
+    --sample_dir $data_root/sample_128 \
+    --split_unit 128 \
+    --norm_mode after_split
 
-# python3 split_merge_pipeline.py \
-#     --task split_train \
-#     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/sample_108 \
-#     --split_unit 108 \
-#     --norm_mode after_split
+python3 split_merge_pipeline.py \
+    --task split_train \
+    --interm_png_dir $data_root/interm_png \
+    --sample_dir $data_root/sample_108 \
+    --split_unit 108 \
+    --norm_mode after_split
 
 # -------------------------- split inference --------------------------
 # python3 split_merge_pipeline.py \
@@ -64,8 +64,8 @@ data_root="/home/lenovo/treeseg-dataset/preprocess/1014/predict"
 #     --result_dir $data_root/inference_result_108 \
 
 # -------------------------- merge --------------------------
-python3 split_merge_pipeline.py \
-    --task merge \
-    --result_dir $data_root/inference_result_108 \
-    --split_unit 108 \
-    --merge_dir $data_root/merge_result_108 \
+# python3 split_merge_pipeline.py \
+#     --task merge \
+#     --result_dir $data_root/inference_result_108 \
+#     --split_unit 108 \
+#     --merge_dir $data_root/merge_result_108 \

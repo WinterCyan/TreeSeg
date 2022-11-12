@@ -3,12 +3,12 @@
 #     return _binary_geo("intersection", self, other)
 # except Exception:
 #     return []
+data_root="/home/lenovo/treeseg-dataset/full_process"
 
-data_root="/home/lenovo/treeseg-dataset/preprocess/all"
-
-python3 split_merge_pipeline.py \
+# -------------------------- preprocess --------------------------
+python3 -W ignore split_merge_pipeline.py \
     --task preprocess_train \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
-    --area_range 40-60 \
+    --area_range 85-90 \
     --interm_png_dir $data_root/interm_png
