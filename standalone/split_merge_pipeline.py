@@ -534,7 +534,7 @@ def model_inference(model_path, sample_dir, result_dir):
         ndvi_img = Image.open(ndvi_img_fn).resize((256,256))
         pan_arr = np.array(pan_img)
         ndvi_arr = np.array(ndvi_img)
-        comb_img = np.transpose(np.stack((ndvi_arr, pan_arr),axis=0))
+        comb_img = np.transpose(np.stack((ndvi_arr, pan_arr),axis=0), axes=(1,2,0))
         expand_img = comb_img[np.newaxis, :]
         prediction = model.predict(expand_img, steps=1)
         prediction[prediction>0.5]=1
@@ -552,7 +552,7 @@ def get_row_col(name:str):
     return row_col_int
 
     
-def result_merge(result_dir, map_size, save_dir):
+def result_merge(input_dir, result_dir, map_size, save_dir):
     names = [os.path.basename(n) for n in os.listdir(result_dir) if n.endswith('.png')]
     
     row_col_idx_list = [get_row_col(n) for n in names]
@@ -561,35 +561,88 @@ def result_merge(result_dir, map_size, save_dir):
     print(f"merging from {max_row}x{max_col} seg maps...")
 
     (total_height, total_width) = (map_size*max_row, map_size*max_col)
-    total_map_arr = np.zeros((total_height, total_width))
+    total_segmap_arr = np.zeros((total_height, total_width))
+    total_pan_arr = np.zeros((total_height, total_width))
+    total_ndvi_arr = np.zeros((total_height, total_width))
 
     for n in tqdm(names):
-        img_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
+        segmap_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
+        
+        # pan_arr = np.array(Image.open(pjoin(input_dir, n.replace('segmap', 'pan'))))
+        # ndvi_arr = np.array(Image.open(pjoin(input_dir, n.replace('segmap', 'ndvi'))))
+
+        pan_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'pan')))
+        ndvi_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'ndvi')))
+        pan_pf = pan_ds.profile
+        ndvi_pf = ndvi_ds.profile
+
+        pan_pf['dtype'] = rasterio.float32
+        pan_pf['height'] = max_row * map_size
+        pan_pf['width'] = max_col * map_size
+        pan_pf['blockxsize'] = 32
+        pan_pf['blockysize'] = 32
+        pan_pf['count'] = 1
+
+        ndvi_pf['dtype'] = rasterio.float32
+        ndvi_pf['height'] = max_row * map_size
+        ndvi_pf['width'] = max_col * map_size
+        ndvi_pf['blockxsize'] = 32
+        ndvi_pf['blockysize'] = 32
+        ndvi_pf['count'] = 1
+
+        pan_arr = pan_ds.read(1).astype(pan_pf['dtype'])
+        ndvi_arr = ndvi_ds.read(1).astype(ndvi_pf['dtype'])
+
         (row, col) = get_row_col(n)
-        total_map_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = img_arr
+        total_segmap_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = segmap_arr
+        total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
+        total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
 
     # print(f"total map arr: {total_map_arr.shape}, {type(total_map_arr)}, {np.unique(total_map_arr)}")
     print("saving total map...")
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    total_map = Image.fromarray(total_map_arr.astype(np.uint8))
-    total_map.save(pjoin(save_dir, "merge_result.png"))
 
-    # total_map_arr = np.array(Image.open(pjoin(save_dir, "merge_result.png")))
-    # (total_height, total_width) = total_map_arr.shape
+    total_segmap = Image.fromarray(total_segmap_arr.astype(np.uint8))
+    total_segmap.save(pjoin(save_dir, "merge-result-segmap.png"))
+
+    with rstopen(pjoin(save_dir, "merge-result-pan.png"), 'w', **pan_pf) as dst:
+        dst.write(total_pan_arr, 1)
+        dst.close()
+
+    with rstopen(pjoin(save_dir, "merge-result-ndvi.png"), 'w', **ndvi_pf) as dst:
+        dst.write(total_ndvi_arr, 1)
+        dst.close()
+    
+
     print("saving partial maps...")
     grid = 5000
+    partial_h = 3008
+    partial_w = 4992
+
+    partial_pan_pf = pan_pf
+    partial_pan_pf['width'] = partial_w
+    partial_pan_pf['height'] = partial_h
+    partial_ndvi_pf = ndvi_pf
+    partial_ndvi_pf['width'] = partial_w
+    partial_ndvi_pf['height'] = partial_h
+
     for i in range(0, int(total_height/grid)):
         for j in range(0, int(total_width/grid)):
-            partial_map_arr = total_map_arr[grid*i:grid*i+3000, grid*j:grid*j+5000]
-            partial_map = Image.fromarray(partial_map_arr.astype(np.uint8))
-            partial_map.save(pjoin(save_dir, f"merge_result_partial{i}-{j}.png"))
+            partial_segmap_arr = total_segmap_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
+            partial_pan_arr = total_pan_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
+            partial_ndvi_arr = total_ndvi_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
 
-    # for r in range(0, max_row):
-    #     for c in range(0, max_col):
-    #         img = Image.open(pjoin(result_dir))
+            partial_segmap = Image.fromarray(partial_segmap_arr.astype(np.uint8))
+            partial_segmap.save(pjoin(save_dir, f"merge_result_partial{i}-{j}-segmap.png"))
 
+            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.png"), 'w', **partial_pan_pf) as dst:
+                dst.write(partial_pan_arr, 1)
+                dst.close()
 
+            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.png"), 'w', **partial_ndvi_pf) as dst:
+                dst.write(partial_ndvi_arr, 1)
+                dst.close()
 
 
 if __name__ == '__main__':
@@ -602,6 +655,7 @@ if __name__ == '__main__':
     parser.add_argument("--sample_dir", type=str)
     parser.add_argument("--model_path", type=str)
     parser.add_argument("--result_dir", type=str)
+    parser.add_argument("--input_dir", type=str)
     parser.add_argument("--merge_dir", type=str)
     parser.add_argument("--split_unit", type=int)
     parser.add_argument("--norm_mode", type=str, default="after_split")
@@ -653,10 +707,12 @@ if __name__ == '__main__':
         )
 
     if args.task == "merge":
+        assert args.input_dir is not None, "please set input_dir arg!"
         assert args.result_dir is not None, "please set result_dir arg!"
         assert args.split_unit is not None, "please set split_unit arg!"
         assert args.merge_dir is not None, "please set merge_dir arg!"
         result_merge(
+            input_dir=args.input_dir,
             result_dir=args.result_dir,
             map_size=args.split_unit,
             save_dir=args.merge_dir
