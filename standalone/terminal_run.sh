@@ -1,8 +1,10 @@
-# ALERT: modify geopandas lib (base.py intersection() as follows: )
+# !!!ALERT!!!: modify geopandas lib (base.py intersection() as follows: )
 # try: 
 #     return _binary_geo("intersection", self, other)
 # except Exception:
 #     return []
+
+# !!!ALERT!!!: ndvi.tif contains -3.4028234663852886e+38, clip to range [0,1] right after read from tif
 
 # data_root="/home/lenovo/treeseg-dataset/full_process"
 data_root="/home/lenovo/treeseg-dataset/inference/all-views"
@@ -54,8 +56,9 @@ data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 # python3 split_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_128 \
-#     --split_unit 128
+#     --sample_dir $data_root/inference_sample_128_no_norm \
+#     --split_unit 128 \
+#     --norm_mode no_norm
 
 # # -------------------------- inference --------------------------
 # python3 split_merge_pipeline.py \
@@ -71,3 +74,4 @@ python3 split_merge_pipeline.py \
     --result_dir $data_root/inference_result_128 \
     --split_unit 128 \
     --merge_dir $data_root/merge_result_128 \
+    --origin_tif $data_root/tif/pan0.tif

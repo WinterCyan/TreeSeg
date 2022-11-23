@@ -263,7 +263,7 @@ def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writ
     if allAreas.difference(overlapppedAreas):
         print(f'Warning: Could not find a raw image correspoinding to {allAreas.difference(overlapppedAreas)} areas. Make sure that you have provided the correct paths!')
 
-def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
+def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_split"):
     """read tif & split into pngs
 
     Args:
@@ -273,7 +273,8 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         norm_mode: norm image before/after split
     """
 
-    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
+    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    print(f'norm mode: {norm_mode}')
 
     if not os.path.exists(sample_dir):
         os.makedirs(sample_dir)
@@ -317,6 +318,12 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
 
         pan_arr = pan_dataset.read(1).astype(pan_profile['dtype'])
         ndvi_arr = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
+
+        ndvi_invalid_v = np.min(ndvi_arr)
+        invalid_locs = ndvi_arr==ndvi_invalid_v
+        ndvi_arr[invalid_locs] = 0
+        print(f'ndvi min val: {np.min(ndvi_arr)}')
+
         if norm_mode=="before_split":
             pan_arr = image_normalize(pan_arr)
             ndvi_arr = image_normalize(ndvi_arr)
@@ -326,10 +333,9 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
         split_rows = int(height/split_unit)
         split_cols = int(width/split_unit)
         print(f"spliting into {split_rows}x{split_cols} squares...")
-        for r in range(split_rows):
+        for r in tqdm(range(split_rows)):
             for c in range(split_cols):
                 idx_str = f"r{r}c{c}"
-                print(f"writing {idx_str}...")
                 pan_sample = pan_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 ndvi_sample = ndvi_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 if norm_mode=="after_split":
@@ -337,12 +343,11 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after"):
                     ndvi_sample = image_normalize(ndvi_sample)
                 with rstopen(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
                     dst.write(pan_sample, 1)
-                    print(pan_sample.shape)
-                    print(f"max: {np.max(pan_sample)}, min: {np.min(pan_sample)}")
+                    # print(f"max: {np.max(pan_sample)}, min: {np.min(pan_sample)}")
                     dst.close()
                 with rstopen(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
                     dst.write(ndvi_sample, 1)
-                    print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
+                    # print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
                     dst.close()
 
 def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_png_dir, norm_mode="after_split"):
@@ -552,7 +557,7 @@ def get_row_col(name:str):
     return row_col_int
 
     
-def result_merge(input_dir, result_dir, map_size, save_dir):
+def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir):
     names = [os.path.basename(n) for n in os.listdir(result_dir) if n.endswith('.png')]
     
     row_col_idx_list = [get_row_col(n) for n in names]
@@ -560,7 +565,9 @@ def result_merge(input_dir, result_dir, map_size, save_dir):
     max_col = max([idx[1] for idx in row_col_idx_list])+1
     print(f"merging from {max_row}x{max_col} seg maps...")
 
-    (total_height, total_width) = (map_size*max_row, map_size*max_col)
+    origin_tif_data = rstopen(origin_tif).read(1)
+    origin_shape = origin_tif_data.shape
+    (total_height, total_width) = origin_shape
     total_segmap_arr = np.zeros((total_height, total_width))
     total_pan_arr = np.zeros((total_height, total_width))
     total_ndvi_arr = np.zeros((total_height, total_width))
@@ -568,24 +575,21 @@ def result_merge(input_dir, result_dir, map_size, save_dir):
     for n in tqdm(names):
         segmap_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
         
-        # pan_arr = np.array(Image.open(pjoin(input_dir, n.replace('segmap', 'pan'))))
-        # ndvi_arr = np.array(Image.open(pjoin(input_dir, n.replace('segmap', 'ndvi'))))
-
         pan_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'pan')))
         ndvi_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'ndvi')))
         pan_pf = pan_ds.profile
         ndvi_pf = ndvi_ds.profile
 
         pan_pf['dtype'] = rasterio.float32
-        pan_pf['height'] = max_row * map_size
-        pan_pf['width'] = max_col * map_size
+        pan_pf['height'] = total_height
+        pan_pf['width'] = total_width
         pan_pf['blockxsize'] = 32
         pan_pf['blockysize'] = 32
         pan_pf['count'] = 1
 
         ndvi_pf['dtype'] = rasterio.float32
-        ndvi_pf['height'] = max_row * map_size
-        ndvi_pf['width'] = max_col * map_size
+        ndvi_pf['height'] = total_height
+        ndvi_pf['width'] = total_width
         ndvi_pf['blockxsize'] = 32
         ndvi_pf['blockysize'] = 32
         ndvi_pf['count'] = 1
@@ -598,7 +602,6 @@ def result_merge(input_dir, result_dir, map_size, save_dir):
         total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
         total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
 
-    # print(f"total map arr: {total_map_arr.shape}, {type(total_map_arr)}, {np.unique(total_map_arr)}")
     print("saving total map...")
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -606,11 +609,11 @@ def result_merge(input_dir, result_dir, map_size, save_dir):
     total_segmap = Image.fromarray(total_segmap_arr.astype(np.uint8))
     total_segmap.save(pjoin(save_dir, "merge-result-segmap.png"))
 
-    with rstopen(pjoin(save_dir, "merge-result-pan.png"), 'w', **pan_pf) as dst:
+    with rstopen(pjoin(save_dir, "merge-result-pan.tif"), 'w', **pan_pf) as dst:
         dst.write(total_pan_arr, 1)
         dst.close()
 
-    with rstopen(pjoin(save_dir, "merge-result-ndvi.png"), 'w', **ndvi_pf) as dst:
+    with rstopen(pjoin(save_dir, "merge-result-ndvi.tif"), 'w', **ndvi_pf) as dst:
         dst.write(total_ndvi_arr, 1)
         dst.close()
     
@@ -636,13 +639,73 @@ def result_merge(input_dir, result_dir, map_size, save_dir):
             partial_segmap = Image.fromarray(partial_segmap_arr.astype(np.uint8))
             partial_segmap.save(pjoin(save_dir, f"merge_result_partial{i}-{j}-segmap.png"))
 
-            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.png"), 'w', **partial_pan_pf) as dst:
+            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.tif"), 'w', **partial_pan_pf) as dst:
                 dst.write(partial_pan_arr, 1)
                 dst.close()
 
-            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.png"), 'w', **partial_ndvi_pf) as dst:
+            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.tif"), 'w', **partial_ndvi_pf) as dst:
                 dst.write(partial_ndvi_arr, 1)
                 dst.close()
+
+def result_merge_tif(input_dir, map_size, save_dir):
+    names = [os.path.basename(n) for n in os.listdir(input_dir) if n.endswith('pan0.png')]
+    
+    row_col_idx_list = [get_row_col(n) for n in names]
+    max_row = max([idx[0] for idx in row_col_idx_list])+1
+    max_col = max([idx[1] for idx in row_col_idx_list])+1
+    print(f"merging from {max_row}x{max_col} seg maps...")
+
+    (total_height, total_width) = (33705, 34659)
+    total_pan_arr = np.zeros((total_height, total_width))
+    total_ndvi_arr = np.zeros((total_height, total_width))
+
+    empty_count = 0
+    for n in tqdm(names):
+        pan_ds = rstopen(pjoin(input_dir, n))
+        ndvi_ds = rstopen(pjoin(input_dir, n.replace('pan', 'ndvi')))
+        pan_pf = pan_ds.profile
+        ndvi_pf = ndvi_ds.profile
+
+        pan_pf['dtype'] = rasterio.float32
+        pan_pf['height'] = total_height
+        pan_pf['width'] = total_width
+        pan_pf['blockxsize'] = 32
+        pan_pf['blockysize'] = 32
+        pan_pf['count'] = 1
+
+        ndvi_pf['dtype'] = rasterio.float32
+        ndvi_pf['height'] = total_height
+        ndvi_pf['width'] = total_width
+        ndvi_pf['blockxsize'] = 32
+        ndvi_pf['blockysize'] = 32
+        ndvi_pf['count'] = 1
+
+        pan_arr = pan_ds.read(1).astype(pan_pf['dtype'])
+        ndvi_arr = ndvi_ds.read(1).astype(ndvi_pf['dtype'])
+
+        (row, col) = get_row_col(n)
+        if np.mean(pan_arr)==0.0:
+            empty_count += 1
+            pan_arr = np.ones_like(pan_arr)*1000
+            # if row>70 and row<100 and col>70 and col<100:
+                # print(f'met zero: r{row}c{col}')
+
+        total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
+        total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
+
+    print("saving total map...")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    
+    print(f'met empty areas: {empty_count}')
+
+    with rstopen(pjoin(save_dir, "pan.tif"), 'w', **pan_pf) as dst:
+        dst.write(total_pan_arr, 1)
+        dst.close()
+
+    with rstopen(pjoin(save_dir, "ndvi.tif"), 'w', **ndvi_pf) as dst:
+        dst.write(total_ndvi_arr, 1)
+        dst.close()
 
 
 if __name__ == '__main__':
@@ -657,6 +720,7 @@ if __name__ == '__main__':
     parser.add_argument("--result_dir", type=str)
     parser.add_argument("--input_dir", type=str)
     parser.add_argument("--merge_dir", type=str)
+    parser.add_argument("--origin_tif", type=str)
     parser.add_argument("--split_unit", type=int)
     parser.add_argument("--norm_mode", type=str, default="after_split")
     args = parser.parse_args()
@@ -711,9 +775,11 @@ if __name__ == '__main__':
         assert args.result_dir is not None, "please set result_dir arg!"
         assert args.split_unit is not None, "please set split_unit arg!"
         assert args.merge_dir is not None, "please set merge_dir arg!"
+        assert args.origin_tif is not None, "please set origin_tif arg!"
         result_merge(
             input_dir=args.input_dir,
             result_dir=args.result_dir,
+            origin_tif=args.origin_tif,
             map_size=args.split_unit,
             save_dir=args.merge_dir
         )
