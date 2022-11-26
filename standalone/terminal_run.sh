@@ -7,6 +7,7 @@
 # !!!ALERT!!!: ndvi.tif contains -3.4028234663852886e+38, clip to range [0,1] right after read from tif
 
 # data_root="/home/lenovo/treeseg-dataset/full_process"
+# data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 
 # -------------------------- preprocess --------------------------

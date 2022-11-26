@@ -132,3 +132,9 @@ dmypy.json
 saved_models/
 logs/
 patches256/
+
+# img files
+standalone/segmap_file
+
+# macos
+.DS_Store
