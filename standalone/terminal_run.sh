@@ -7,8 +7,8 @@
 # !!!ALERT!!!: ndvi.tif contains -3.4028234663852886e+38, clip to range [0,1] right after read from tif
 
 # data_root="/home/lenovo/treeseg-dataset/full_process"
+data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 # data_root="/home/lenovo/treeseg-dataset/inference/all-views"
-data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 
 # -------------------------- preprocess --------------------------
 # python3 -W ignore split_merge_pipeline.py \
@@ -54,19 +54,19 @@ data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 #     --sample_dir $data_root/inference_sample_108 \
 #     --split_unit 108
 
-# python3 split_merge_pipeline.py \
-#     --task split_inference \
-#     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_128_no_norm \
-#     --split_unit 128 \
-#     --norm_mode no_norm
+python3 split_merge_pipeline.py \
+    --task split_inference \
+    --tif_dir $data_root/tif \
+    --sample_dir $data_root/inference_sample_128 \
+    --split_unit 128 \
+    --norm_mode after_split
 
 # # -------------------------- inference --------------------------
-# python3 split_merge_pipeline.py \
-#     --task inference \
-#     --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model-1115.h5 \
-#     --sample_dir $data_root/inference_sample_128 \
-#     --result_dir $data_root/inference_result_128 \
+python3 split_merge_pipeline.py \
+    --task inference \
+    --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model-1115.h5 \
+    --sample_dir $data_root/inference_sample_128 \
+    --result_dir $data_root/inference_result_128 \
 
 # -------------------------- merge --------------------------
 python3 split_merge_pipeline.py \
@@ -75,4 +75,4 @@ python3 split_merge_pipeline.py \
     --result_dir $data_root/inference_result_128 \
     --split_unit 128 \
     --merge_dir $data_root/merge_result_128 \
-    --origin_tif $data_root/tif/pan0.tif
+    --origin_tif $data_root/tif/pan-0.tif

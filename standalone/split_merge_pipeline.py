@@ -616,36 +616,40 @@ def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir):
     with rstopen(pjoin(save_dir, "merge-result-ndvi.tif"), 'w', **ndvi_pf) as dst:
         dst.write(total_ndvi_arr, 1)
         dst.close()
+
+    with rstopen(pjoin(save_dir, "merge-result-segmap.tif"), 'w', **pan_pf) as dst:
+        dst.write(total_segmap_arr, 1)
+        dst.close()
     
 
-    print("saving partial maps...")
-    grid = 5000
-    partial_h = 3008
-    partial_w = 4992
+    # print("saving partial maps...")
+    # grid = 5000
+    # partial_h = 3008
+    # partial_w = 4992
 
-    partial_pan_pf = pan_pf
-    partial_pan_pf['width'] = partial_w
-    partial_pan_pf['height'] = partial_h
-    partial_ndvi_pf = ndvi_pf
-    partial_ndvi_pf['width'] = partial_w
-    partial_ndvi_pf['height'] = partial_h
+    # partial_pan_pf = pan_pf
+    # partial_pan_pf['width'] = partial_w
+    # partial_pan_pf['height'] = partial_h
+    # partial_ndvi_pf = ndvi_pf
+    # partial_ndvi_pf['width'] = partial_w
+    # partial_ndvi_pf['height'] = partial_h
 
-    for i in range(0, int(total_height/grid)):
-        for j in range(0, int(total_width/grid)):
-            partial_segmap_arr = total_segmap_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
-            partial_pan_arr = total_pan_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
-            partial_ndvi_arr = total_ndvi_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
+    # for i in range(0, int(total_height/grid)):
+    #     for j in range(0, int(total_width/grid)):
+    #         partial_segmap_arr = total_segmap_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
+    #         partial_pan_arr = total_pan_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
+    #         partial_ndvi_arr = total_ndvi_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
 
-            partial_segmap = Image.fromarray(partial_segmap_arr.astype(np.uint8))
-            partial_segmap.save(pjoin(save_dir, f"merge_result_partial{i}-{j}-segmap.png"))
+    #         partial_segmap = Image.fromarray(partial_segmap_arr.astype(np.uint8))
+    #         partial_segmap.save(pjoin(save_dir, f"merge_result_partial{i}-{j}-segmap.png"))
 
-            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.tif"), 'w', **partial_pan_pf) as dst:
-                dst.write(partial_pan_arr, 1)
-                dst.close()
+    #         with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.tif"), 'w', **partial_pan_pf) as dst:
+    #             dst.write(partial_pan_arr, 1)
+    #             dst.close()
 
-            with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.tif"), 'w', **partial_ndvi_pf) as dst:
-                dst.write(partial_ndvi_arr, 1)
-                dst.close()
+    #         with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.tif"), 'w', **partial_ndvi_pf) as dst:
+    #             dst.write(partial_ndvi_arr, 1)
+    #             dst.close()
 
 def result_merge_tif(input_dir, map_size, save_dir):
     names = [os.path.basename(n) for n in os.listdir(input_dir) if n.endswith('pan0.png')]
