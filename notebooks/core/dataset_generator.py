@@ -92,6 +92,7 @@ class DataGenerator():
 
         img = data[..., self.input_image_channel]
         ann_joint = data[..., self.annotation_channel]
+        print(f'---------------mean:{np.mean(img)}, var:{np.var(img)}')
         return (img, ann_joint)
 #     print("Wrote {} random patches to {} with patch size {}".format(count,write_dir,patch_size))
 

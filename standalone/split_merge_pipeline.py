@@ -174,7 +174,7 @@ def rowColPolygons(areaDf, areaShape, profile, filename, outline, fill):
     with rstopen(filename.replace('json', 'png'), 'w', **profile) as dst:
         dst.write(mask.astype(rasterio.int16), 1)
 
-def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter, normalize=True):
+def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter, normalize=False):
     """
     Write the part of raw image that overlaps with a training area into a separate image file. 
     Use rowColPolygons to create and write annotation and boundary image from polygons in the training area.
@@ -185,10 +185,12 @@ def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundar
             # If raster has multiple channels, then bands will be [0, 1, ...] otherwise simply [0]
             dt = sm[0][band].astype(profile['dtype'])
             if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
+                print('----------------norm when proprecess train----------------')
                 dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
             print(f"writing {imFn}-area{writeCounter}.png ...")
             with rstopen(pjoin(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
-                    dst.write(dt, 1) 
+                print(f'when preprocess: min-max of dt: {np.min(dt)}, {np.max(dt)}')
+                dst.write(dt, 1) 
         if annotationFilename:
             annotation_json_filepath = pjoin(writePath,annotationFilename+'-area{}.json'.format(writeCounter))
             # The object is given a value of 1, the outline or the border of the object is given a value of 0 and rest of the image/background is given a a value of 0
@@ -369,7 +371,7 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
     if not os.path.exists(interm_png_dir):
         os.makedirs(interm_png_dir)
 
-    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
+    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
 
     # get tif pairs, for every pair of tif, find area & polygon shp.
     all_pan_filenames = [name for name in os.listdir(tif_dir) if name.startswith("pan-") and name.endswith(".tif")]
@@ -437,7 +439,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
 
     interm_png_dir = interm_png_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
-    assert norm_mode == "before_split" or norm_mode == "after_split", "norm_mode argument NOT valid!"
+    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
 
     if not os.path.exists(sample_dir):
         os.makedirs(sample_dir)
@@ -487,6 +489,10 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
         annotation_img = annotation_dataset.read(1).astype(annotation_profile['dtype'])
         boundary_img = boundary_dataset.read(1).astype(boundary_profile['dtype'])
         assert pan_img.shape == ndvi_img.shape == annotation_img.shape == boundary_img.shape
+
+        ndvi_invalid_v = np.min(ndvi_img)
+        invalid_locs = ndvi_img==ndvi_invalid_v
+        ndvi_img[invalid_locs] = 0
 
         if norm_mode=="before_split":
             pan_img = image_normalize(pan_img)

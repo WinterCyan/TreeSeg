@@ -47,7 +47,7 @@ from configx import UNetTraining
 
 config = UNetTraining.Configuration()
 
-base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128"
+base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
 # base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
 
 
@@ -104,7 +104,7 @@ chs = reduce(lambda a,b: a+str(b), chf, '')
 
 if not os.path.exists(config.model_path):
     os.makedirs(config.model_path)
-model_path = os.path.join(config.model_path,'trees_{}_{}_{}_{}_{}.h5'.format(timestr,OPTIMIZER_NAME,LOSS_NAME,chs,config.input_shape[0]))
+model_path = os.path.join(config.model_path,'no-norm-trees_{}_{}_{}_{}_{}.h5'.format(timestr,OPTIMIZER_NAME,LOSS_NAME,chs,config.input_shape[0]))
 print(model_path)
 
 # The weights without the model architecture can also be saved. Just saving the weights is more efficent.

@@ -10,5 +10,5 @@ python3 split_merge_pipeline.py \
     --task preprocess_train \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
-    --area_range 160-180 \
-    --interm_png_dir $data_root/interm_png
+    --area_range 200-220 \
+    --interm_png_dir $data_root/interm_png_nonorm

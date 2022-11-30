@@ -12,4 +12,4 @@ python3 -W ignore split_merge_pipeline.py \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
     --area_range 152-180 \
-    --interm_png_dir $data_root/interm_png
+    --interm_png_dir $data_root/interm_png_nonorm

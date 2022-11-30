@@ -8,7 +8,7 @@ class Configuration:
         # In most cases, they will take the same value as in the config/Preprocessing.py
         # self.base_dir = "/media/lenovo/Elements SE/predict/predict1/"
         # self.base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
-        self.base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128"
+        self.base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
         self.image_type = '.png'
         # self.image_type = '.npy'
         self.ndvi_fn = 'ndvi'
@@ -31,7 +31,7 @@ class Configuration:
         
         # Probability with which the generated patches should be normalized 0 -> don't normalize, 1 -> normalize all
         # ?
-        self.normalize = 1.0
+        self.normalize = 0.0
 
         
         # The split of training areas into training, validation and testing set, is cached in patch_dir.
