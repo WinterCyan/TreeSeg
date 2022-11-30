@@ -54,19 +54,19 @@ data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 #     --sample_dir $data_root/inference_sample_108 \
 #     --split_unit 108
 
-python3 split_merge_pipeline.py \
-    --task split_inference \
-    --tif_dir $data_root/tif \
-    --sample_dir $data_root/inference_sample_128 \
-    --split_unit 128 \
-    --norm_mode after_split
+# python3 split_merge_pipeline.py \
+#     --task split_inference \
+#     --tif_dir $data_root/tif \
+#     --sample_dir $data_root/inference_sample_128 \
+#     --split_unit 128 \
+#     --norm_mode after_split
 
 # # -------------------------- inference --------------------------
-python3 split_merge_pipeline.py \
-    --task inference \
-    --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model-1115.h5 \
-    --sample_dir $data_root/inference_sample_128 \
-    --result_dir $data_root/inference_result_128 \
+# python3 split_merge_pipeline.py \
+#     --task inference \
+#     --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model-1115.h5 \
+#     --sample_dir $data_root/inference_sample_128 \
+#     --result_dir $data_root/inference_result_128 \
 
 # -------------------------- merge --------------------------
 python3 split_merge_pipeline.py \

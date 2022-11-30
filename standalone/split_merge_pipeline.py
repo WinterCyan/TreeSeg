@@ -557,50 +557,41 @@ def get_row_col(name:str):
     return row_col_int
 
     
-def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir):
+def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir, merge_tif=False):
     names = [os.path.basename(n) for n in os.listdir(result_dir) if n.endswith('.png')]
     
     row_col_idx_list = [get_row_col(n) for n in names]
     max_row = max([idx[0] for idx in row_col_idx_list])+1
     max_col = max([idx[1] for idx in row_col_idx_list])+1
-    print(f"merging from {max_row}x{max_col} seg maps...")
 
-    origin_tif_data = rstopen(origin_tif).read(1)
-    origin_shape = origin_tif_data.shape
-    (total_height, total_width) = origin_shape
+    origin_tif_ds = rstopen(origin_tif)
+    origin_tif_pf = origin_tif_ds.profile
+    (total_height, total_width) = (origin_tif_pf['height'], origin_tif_pf['width'])
+
+    dst_pf = origin_tif_pf
+    dst_pf['dtype'] = rasterio.float32
+    dst_pf['count'] = 1
+
     total_segmap_arr = np.zeros((total_height, total_width))
-    total_pan_arr = np.zeros((total_height, total_width))
-    total_ndvi_arr = np.zeros((total_height, total_width))
 
+    print(f"merging from {max_row}x{max_col} seg maps...")
     for n in tqdm(names):
-        segmap_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
-        
-        pan_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'pan')))
-        ndvi_ds = rstopen(pjoin(input_dir, n.replace('segmap', 'ndvi')))
-        pan_pf = pan_ds.profile
-        ndvi_pf = ndvi_ds.profile
-
-        pan_pf['dtype'] = rasterio.float32
-        pan_pf['height'] = total_height
-        pan_pf['width'] = total_width
-        pan_pf['blockxsize'] = 32
-        pan_pf['blockysize'] = 32
-        pan_pf['count'] = 1
-
-        ndvi_pf['dtype'] = rasterio.float32
-        ndvi_pf['height'] = total_height
-        ndvi_pf['width'] = total_width
-        ndvi_pf['blockxsize'] = 32
-        ndvi_pf['blockysize'] = 32
-        ndvi_pf['count'] = 1
-
-        pan_arr = pan_ds.read(1).astype(pan_pf['dtype'])
-        ndvi_arr = ndvi_ds.read(1).astype(ndvi_pf['dtype'])
-
         (row, col) = get_row_col(n)
+        segmap_arr = np.array(Image.open(pjoin(result_dir, n)).resize((map_size, map_size), resample=PIL.Image.Resampling.NEAREST))
         total_segmap_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = segmap_arr
-        total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
-        total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
+        
+    if merge_tif:
+        print("merging tif...")
+        total_pan_arr = np.zeros((total_height, total_width))
+        total_ndvi_arr = np.zeros((total_height, total_width))
+
+        for n in tqdm(names):
+            pan_arr = rstopen(pjoin(input_dir, n.replace('segmap', 'pan'))).read(1).astype(rasterio.float32)
+            ndvi_arr = rstopen(pjoin(input_dir, n.replace('segmap', 'ndvi'))).read(1).astype(rasterio.float32)
+
+            total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
+            total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
+
 
     print("saving total map...")
     if not os.path.exists(save_dir):
@@ -609,18 +600,19 @@ def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir):
     total_segmap = Image.fromarray(total_segmap_arr.astype(np.uint8))
     total_segmap.save(pjoin(save_dir, "merge-result-segmap.png"))
 
-    with rstopen(pjoin(save_dir, "merge-result-pan.tif"), 'w', **pan_pf) as dst:
-        dst.write(total_pan_arr, 1)
-        dst.close()
-
-    with rstopen(pjoin(save_dir, "merge-result-ndvi.tif"), 'w', **ndvi_pf) as dst:
-        dst.write(total_ndvi_arr, 1)
-        dst.close()
-
-    with rstopen(pjoin(save_dir, "merge-result-segmap.tif"), 'w', **pan_pf) as dst:
+    with rstopen(pjoin(save_dir, "merge-result-segmap.tif"), 'w', **dst_pf) as dst:
         dst.write(total_segmap_arr, 1)
         dst.close()
-    
+
+    if merge_tif:
+        with rstopen(pjoin(save_dir, "merge-result-pan.tif"), 'w', **dst_pf) as dst:
+            dst.write(total_pan_arr, 1)
+            dst.close()
+
+        with rstopen(pjoin(save_dir, "merge-result-ndvi.tif"), 'w', **dst_pf) as dst:
+            dst.write(total_ndvi_arr, 1)
+            dst.close()
+
 
     # print("saving partial maps...")
     # grid = 5000
@@ -727,6 +719,7 @@ if __name__ == '__main__':
     parser.add_argument("--origin_tif", type=str)
     parser.add_argument("--split_unit", type=int)
     parser.add_argument("--norm_mode", type=str, default="after_split")
+    parser.add_argument("--merge_tif", action="store_true")
     args = parser.parse_args()
 
 
@@ -780,12 +773,14 @@ if __name__ == '__main__':
         assert args.split_unit is not None, "please set split_unit arg!"
         assert args.merge_dir is not None, "please set merge_dir arg!"
         assert args.origin_tif is not None, "please set origin_tif arg!"
+        assert args.merge_tif is not None, "please set merge_tif arg!"
         result_merge(
             input_dir=args.input_dir,
             result_dir=args.result_dir,
             origin_tif=args.origin_tif,
             map_size=args.split_unit,
-            save_dir=args.merge_dir
+            save_dir=args.merge_dir,
+            merge_tif=args.merge_tif
         )
 
     # inference()
