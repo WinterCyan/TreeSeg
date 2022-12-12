@@ -6,17 +6,17 @@
 
 # !!!ALERT!!!: ndvi.tif contains -3.4028234663852886e+38, clip to range [0,1] right after read from tif
 
-data_root="/home/lenovo/treeseg-dataset/full_process"
-# data_root="/home/lenovo/treeseg-dataset/inference_train_data"
+# data_root="/home/lenovo/treeseg-dataset/full_process"
+data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 # data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 
 # -------------------------- preprocess --------------------------
-python3 -W ignore split_merge_pipeline.py \
-    --task preprocess_train \
-    --tif_dir $data_root/tif \
-    --area_polygon_dir $data_root/shp \
-    --area_range  0-2 \
-    --interm_png_dir $data_root/interm_png_nonorm
+# python3 -W ignore split_merge_pipeline.py \
+#     --task preprocess_train \
+#     --tif_dir $data_root/tif \
+#     --area_polygon_dir $data_root/shp \
+#     --area_range  0-2 \
+#     --interm_png_dir $data_root/interm_png_nonorm
 
 
 # -------------------------- split train --------------------------
@@ -29,10 +29,10 @@ python3 -W ignore split_merge_pipeline.py \
 
 # python3 split_merge_pipeline.py \
 #     --task split_train \
-#     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/sample_128_nonorm \
+#     --interm_png_dir $data_root/interm_png_nonorm \
+#     --sample_dir $data_root/sample_128_afternorm \
 #     --split_unit 128 \
-#     --norm_mode no_norm
+#     --norm_mode after_split
 
 # python3 split_merge_pipeline.py \
 #     --task split_train \
@@ -57,22 +57,22 @@ python3 -W ignore split_merge_pipeline.py \
 # python3 split_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_128 \
+#     --sample_dir $data_root/inference_sample_128_nonorm \
 #     --split_unit 128 \
-#     --norm_mode after_split
+#     --norm_mode no_norm
 
 # # -------------------------- inference --------------------------
 # python3 split_merge_pipeline.py \
 #     --task inference \
-#     --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/model-1115.h5 \
-#     --sample_dir $data_root/inference_sample_128 \
-#     --result_dir $data_root/inference_result_128 \
+#     --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/no-norm-model-1209.h5 \
+#     --sample_dir $data_root/inference_sample_128_nonorm \
+#     --result_dir $data_root/inference_result_128_nonorm \
 
 # -------------------------- merge --------------------------
-# python3 split_merge_pipeline.py \
-#     --task merge \
-#     --input_dir $data_root/inference_sample_128 \
-#     --result_dir $data_root/inference_result_128 \
-#     --split_unit 128 \
-#     --merge_dir $data_root/merge_result_128 \
-#     --origin_tif $data_root/tif/pan-0.tif
+python3 split_merge_pipeline.py \
+    --task merge \
+    --input_dir $data_root/inference_sample_128_nonorm \
+    --result_dir $data_root/inference_result_128_nonorm \
+    --split_unit 128 \
+    --merge_dir $data_root/merge_result_128_nonorm \
+    --origin_tif $data_root/tif/pan-0.tif

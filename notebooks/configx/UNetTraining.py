@@ -8,7 +8,7 @@ class Configuration:
         # In most cases, they will take the same value as in the config/Preprocessing.py
         # self.base_dir = "/media/lenovo/Elements SE/predict/predict1/"
         # self.base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
-        self.base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
+        self.base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_beforenorm"
         self.image_type = '.png'
         # self.image_type = '.npy'
         self.ndvi_fn = 'ndvi'
@@ -26,8 +26,8 @@ class Configuration:
         # step_size = (128,128)
         
         # The training areas are divided into training, validation and testing set. Note that training area can have different sizes, so it doesn't guarantee that the final generated patches (when using sequential stratergy) will be in the same ratio. 
-        self.test_ratio = 0.1
-        self.val_ratio = 0.1
+        self.test_ratio = 0.05
+        self.val_ratio = 0.05
         
         # Probability with which the generated patches should be normalized 0 -> don't normalize, 1 -> normalize all
         # ?
@@ -46,7 +46,7 @@ class Configuration:
         self.input_weight_channel = [3]
 
         # CNN model related variables used in the notebook
-        self.BATCH_SIZE = 8
+        self.BATCH_SIZE = 4
         self.NB_EPOCHS = 50
 
         # number of validation images to use

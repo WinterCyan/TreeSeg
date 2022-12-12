@@ -47,7 +47,7 @@ from configx import UNetTraining
 
 config = UNetTraining.Configuration()
 
-base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
+base_dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_beforenorm"
 # base_dir = "/home/lenovo/treeseg-dataset/dataset_resize"
 
 
