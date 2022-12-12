@@ -87,6 +87,7 @@ class CarvanaDataset(BasicDataset):
 
 class TreeDataset(Dataset):
     def __init__(self, dataset_dir, img_type='.png'):
+        # dataset_dir contains [pan, ndvi, boundary, annotation] imgs
         super(TreeDataset).__init__()
         self.dataset_shape = (256,256)
 
@@ -122,6 +123,7 @@ class TreeDataset(Dataset):
         boundary = self.preprocess(Image.open(pjoin(self.dataset_dir, f"boundary{name}")), self.dataset_shape, True)
 
         return {
+            # is_contiguous直观的解释是Tensor底层一维数组元素的存储顺序与Tensor按行优先一维展开的元素顺序是否一致。
             'pan': torch.as_tensor(pan.copy()).float().contiguous(),
             'ndvi': torch.as_tensor(ndvi.copy()).float().contiguous(),
             'annotation': torch.as_tensor(annotation.copy()).long().contiguous(),
