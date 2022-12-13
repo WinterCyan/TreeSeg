@@ -26,11 +26,12 @@ import PIL.ImageDraw
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+# TODO: modify model_inference, use torch model (model save & load)
 # from tensorflow.keras.optimizers import Adam, Adadelta, Adagrad, Nadam
-from tensorflow.keras.models import load_model
+# from tensorflow.keras.models import load_model
+# from losses import *
+# from optimizers import *
 import warnings
-from losses import *
-from optimizers import *
 warnings.filterwarnings("ignore")
 
 # adaDelta = Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
