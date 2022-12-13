@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 # from utils.data_loading import BasicDataset, CarvanaDataset
 from treeseg_dataset import TreeDataset, BasicDataset
-from unet_repo import dice_loss
+from unet_repo import dice_loss, WeightedTverskyLoss
 from torch_eval import evaluate
 from unet_repo import UNet
 
@@ -86,8 +86,11 @@ def train_net(
     optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CrossEntropyLoss()
+    criterion = WeightedTverskyLoss()
     global_step = 0
+
+    division_step = (n_train // (10 * batch_size))
 
     # 5. Begin training
     for epoch in range(1, epochs+1):
@@ -102,6 +105,9 @@ def train_net(
                 annotation_batch = batch['annotation']
                 boundary_batch = batch['boundary']
 
+                input_image = torch.concat((pan_batch, ndvi_batch), dim=1)
+                target_tensor = torch.concat((annotation_batch, boundary_batch), dim=1)
+
 # ------------------------------- wintercyan comment -------------------------------
 # dataset create finished.
 # the "boundary" label usage: calculate weighted-tversky loss [losses.py].
@@ -113,26 +119,25 @@ def train_net(
 #                           |
 #                           |
 #                           |---> go on here...
-                assert images.shape[1] == net.n_channels, \
+                assert input_image.shape[1] == net.n_channels, \
                     f'Network has been defined with {net.n_channels} input channels, ' \
-                    f'but loaded images have {images.shape[1]} channels. Please check that ' \
+                    f'but loaded images have {input_image.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'
 
-                images = images.to(device=device, dtype=torch.float32)
-                true_masks = true_masks.to(device=device, dtype=torch.long)
+                input_image = input_image.to(device=device, dtype=torch.float32)
+                annotation_batch = annotation_batch.to(device=device, dtype=torch.float32)
+                boundary_batch = boundary_batch.to(device=device, dtype=torch.float32)
 
                 with torch.cuda.amp.autocast(enabled=amp):
-                    masks_pred = net(images)
-                    # TODO: change loss
-                    loss = criterion(masks_pred, true_masks) + \
-                        dice_loss(F.softmax(masks_pred, dim=1).float(), F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(), multiclass=True)
+                    direct_output = net(input_image)
+                    loss = criterion(direct_output, target_tensor)
 
                 optimizer.zero_grad(set_to_none=True)
                 grad_scaler.scale(loss).backward()
                 grad_scaler.step(optimizer)
                 grad_scaler.update()
 
-                pbar.update(images.shape[0])
+                pbar.update(input_image.shape[0])
                 global_step += 1
                 epoch_loss += loss.item()
                 experiment.log({
@@ -143,31 +148,29 @@ def train_net(
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
 
                 # Evaluation round
-                division_step = (n_train // (10 * batch_size))
-                if division_step > 0:
-                    if global_step % division_step == 0:
-                        histograms = {}
-                        for tag, value in net.named_parameters():
-                            tag = tag.replace('/', '.')
-                            histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
-                            histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
+                if global_step % division_step == 0:
+                    histograms = {}
+                    for tag, value in net.named_parameters():
+                        tag = tag.replace('/', '.')
+                        histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
+                        histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
-                        val_score = evaluate(net, val_loader, device)
-                        scheduler.step(val_score)
+                    val_score = evaluate(net, val_loader, device)
+                    scheduler.step(val_score)
 
-                        logging.info('Validation Dice score: {}'.format(val_score))
-                        experiment.log({
-                            'learning rate': optimizer.param_groups[0]['lr'],
-                            'validation Dice': val_score,
-                            'images': wandb.Image(images[0].cpu()),
-                            'masks': {
-                                'true': wandb.Image(true_masks[0].float().cpu()),
-                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
-                            },
-                            'step': global_step,
-                            'epoch': epoch,
-                            **histograms
-                        })
+                    logging.info('Validation Dice score: {}'.format(val_score))
+                    experiment.log({
+                        'learning rate': optimizer.param_groups[0]['lr'],
+                        'validation Dice': val_score,
+                        'images': wandb.Image(input_image.cpu()),
+                        'masks': {
+                            'true': wandb.Image(annotation_batch.float().cpu()),
+                            'pred': wandb.Image(direct_output.float().cpu()),
+                        },
+                        'step': global_step,
+                        'epoch': epoch,
+                        **histograms
+                    })
 
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
@@ -187,7 +190,7 @@ def get_args():
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
-    parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
+    parser.add_argument('--classes', '-c', type=int, default=1, help='Number of classes')
 
     return parser.parse_args()
 
@@ -202,7 +205,7 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    net = UNet(n_channels=2, n_classes=args.classes, bilinear=args.bilinear)
 
     logging.info(
         f'Network:\n'

@@ -141,63 +141,58 @@ class WeightedTverskyLoss(nn.Module):
         
         return 1 - tversky
 
-def accuracy(label, probs):
+def accuracy(probs, label):
     return torch.eq(torch.round(label), torch.round(probs))
 
-def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
+# TODO: ensure dim's correct
+# def dice_coef(probs, label, smooth=0.0000001):
+#     intersection = torch.sum(torch.abs(label * probs), axis=0)
+#     union = torch.sum(label, axis=0) + torch.sum(probs, axis=0)
+#     return torch.mean((2. * intersection + smooth) / (union + smooth), axis=0)
+
+def dice_coef(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon: float = 1e-6):
+    """
+    inputs are masks
+    """
     # Average of Dice coefficient for all batches, or for a single mask
     assert input.size() == target.size()
-    if input.dim() == 2 and reduce_batch_first:
-        raise ValueError(f'Dice: asked to reduce batch but got tensor without batch dimension (shape {input.shape})')
+    assert input.dim() == 3 or not reduce_batch_first
 
-    if input.dim() == 2 or reduce_batch_first:
-        inter = torch.dot(input.reshape(-1), target.reshape(-1))
-        sets_sum = torch.sum(input) + torch.sum(target)
-        if sets_sum.item() == 0:
-            sets_sum = 2 * inter
+    sum_dim = (-1, -2) if input.dim() == 2 or not reduce_batch_first else (-1, -2, -3)
 
-        return (2 * inter + epsilon) / (sets_sum + epsilon)
-    else:
-        # compute and average metric for each batch element
-        dice = 0
-        for i in range(input.shape[0]):
-            dice += dice_coeff(input[i, ...], target[i, ...])
-        return dice / input.shape[0]
+    inter = 2 * (input * target).sum(dim=sum_dim)
+    sets_sum = input.sum(dim=sum_dim) + target.sum(dim=sum_dim)
+    sets_sum = torch.where(sets_sum == 0, inter, sets_sum)
 
-def multiclass_dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
-    # Average of Dice coefficient for all classes
-    assert input.size() == target.size()
-    dice = 0
-    for channel in range(input.shape[1]):
-        dice += dice_coeff(input[:, channel, ...], target[:, channel, ...], reduce_batch_first, epsilon)
+    dice = (inter + epsilon) / (sets_sum + epsilon)
+    return dice.mean()
 
-    return dice / input.shape[1]
+# def dice_loss(probs, label):
+#     return 1 - dice_coef(probs, label)
 
 def dice_loss(input: Tensor, target: Tensor, multiclass: bool = False):
     # Dice loss (objective to minimize) between 0 and 1
-    assert input.size() == target.size()
-    fn = multiclass_dice_coeff if multiclass else dice_coeff
-    return 1 - fn(input, target, reduce_batch_first=True)
+    return 1 - dice_coef(input, target, reduce_batch_first=True)
 
 # calculate TP, FP, TN, FN: label is 0-1 annotation, probs is predicted probs, range[0,1]
-def true_positives(label, probs):
+def true_positives(probs, label):
     return torch.round(label * probs)
 
-def false_positives(label, probs):
+def false_positives(probs, label):
     return torch.round((1 - label) * probs)
 
-def true_negatives(label, probs):
+def true_negatives(probs, label):
     return torch.round((1 - label) * (1 - probs))
 
-def false_negatives(label, probs):
+def false_negatives(probs, label):
     return torch.round((label) * (1 - probs))
 
-def sensitivity(label, probs):
-    tp = true_positives(label, probs)
-    fn = false_negatives(label, probs)
+def sensitivity(probs, label):
+    tp = true_positives(probs, label)
+    fn = false_negatives(probs, label)
     return torch.sum(tp) / (torch.sum(tp) + torch.sum(fn))
 
-def specificity(label, probs):
-    tn = true_negatives(label, probs)
-    fp = false_positives(label, probs)
+def specificity(probs, label):
+    tn = true_negatives(probs, label)
+    fp = false_positives(probs, label)
     return torch.sum(tn) / (torch.sum(tn) + torch.sum(fp))
