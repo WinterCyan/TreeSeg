@@ -108,6 +108,42 @@ class UNet(nn.Module):
         logits = self.outc(x)
         return logits
 
+
+class WeightedTverskyLoss(nn.Module):
+    def __init__(self, alpha=0.6, delta=0.4, smooth=1e-5, weight=None, size_average=True):
+        super(WeightedTverskyLoss, self).__init__()
+        self.alpha = alpha
+        self.delta = delta 
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        """ 
+        inputs is output before sigmoid (not probs)
+        targets contains annotation & weight
+        """
+        assert targets.shape[0] == 2, "targets channel not 2"
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        inputs = F.sigmoid(inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        labels = targets[0]
+        weights = targets[1]
+        labels = labels.view(-1)
+        weights = weights.view(-1)
+        
+        #True Positives, False Positives & False Negatives
+        TP = (inputs * labels * weights).sum()    
+        FP = ((1-labels) * inputs * weights).sum()
+        FN = (labels * (1-inputs) * weights).sum()
+
+        tversky = (TP + self.smooth) / (TP + self.alpha*FP + self.beta*FN + self.smooth)  
+        
+        return 1 - tversky
+
+def accuracy(label, probs):
+    return torch.eq(torch.round(label), torch.round(probs))
+
 def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
     # Average of Dice coefficient for all batches, or for a single mask
     assert input.size() == target.size()
@@ -128,7 +164,6 @@ def dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, 
             dice += dice_coeff(input[i, ...], target[i, ...])
         return dice / input.shape[0]
 
-
 def multiclass_dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: bool = False, epsilon=1e-6):
     # Average of Dice coefficient for all classes
     assert input.size() == target.size()
@@ -138,9 +173,31 @@ def multiclass_dice_coeff(input: Tensor, target: Tensor, reduce_batch_first: boo
 
     return dice / input.shape[1]
 
-
 def dice_loss(input: Tensor, target: Tensor, multiclass: bool = False):
     # Dice loss (objective to minimize) between 0 and 1
     assert input.size() == target.size()
     fn = multiclass_dice_coeff if multiclass else dice_coeff
     return 1 - fn(input, target, reduce_batch_first=True)
+
+# calculate TP, FP, TN, FN: label is 0-1 annotation, probs is predicted probs, range[0,1]
+def true_positives(label, probs):
+    return torch.round(label * probs)
+
+def false_positives(label, probs):
+    return torch.round((1 - label) * probs)
+
+def true_negatives(label, probs):
+    return torch.round((1 - label) * (1 - probs))
+
+def false_negatives(label, probs):
+    return torch.round((label) * (1 - probs))
+
+def sensitivity(label, probs):
+    tp = true_positives(label, probs)
+    fn = false_negatives(label, probs)
+    return torch.sum(tp) / (torch.sum(tp) + torch.sum(fn))
+
+def specificity(label, probs):
+    tn = true_negatives(label, probs)
+    fp = false_positives(label, probs)
+    return torch.sum(tn) / (torch.sum(tn) + torch.sum(fp))

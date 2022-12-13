@@ -29,6 +29,8 @@ def tversky(y_true, y_pred, alpha=0.6, beta=0.4):
     g0 = y_t
     g1 = ones - y_t
 
+    # p0: inputs, p1: (1-inputs), g0: targets, g1: (1-targets)
+
     tp = tf.reduce_sum(y_weights * p0 * g0)
     fp = alpha * tf.reduce_sum(y_weights * p0 * g1)
     fn = beta * tf.reduce_sum(y_weights * p1 * g0)
