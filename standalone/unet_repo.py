@@ -110,10 +110,10 @@ class UNet(nn.Module):
 
 
 class WeightedTverskyLoss(nn.Module):
-    def __init__(self, alpha=0.6, delta=0.4, smooth=1e-5, weight=None, size_average=True):
+    def __init__(self, alpha=0.6, beta=0.4, smooth=1e-5, weight=None, size_average=True):
         super(WeightedTverskyLoss, self).__init__()
         self.alpha = alpha
-        self.delta = delta 
+        self.beta = beta 
         self.smooth = smooth
 
     def forward(self, inputs, targets):
@@ -121,16 +121,20 @@ class WeightedTverskyLoss(nn.Module):
         inputs is output before sigmoid (not probs)
         targets contains annotation & weight
         """
-        assert targets.shape[0] == 2, "targets channel not 2"
+        print(f'tversky-inputs: {inputs.shape}, targets: {targets.shape}')
+
+        assert targets.shape[1] == 2, "targets channel not 2"
         #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = F.sigmoid(inputs)       
+        inputs = torch.sigmoid(inputs)       
+
         
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
-        labels = targets[0]
-        weights = targets[1]
-        labels = labels.view(-1)
-        weights = weights.view(-1)
+        labels = targets[:,0,:,:].unsqueeze(1)
+        weights = targets[:,1,:,:].unsqueeze(1)
+        print(f'lables: {labels.shape}, weights: {weights.shape}')
+        labels = labels.contiguous().view(-1)
+        weights = weights.contiguous().view(-1)
         
         #True Positives, False Positives & False Negatives
         TP = (inputs * labels * weights).sum()    

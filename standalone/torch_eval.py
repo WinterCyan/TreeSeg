@@ -32,7 +32,7 @@ def evaluate(net, dataloader, device, amp):
 
             # predict the mask
             output = net(inp_concat)
-            probs_pred = F.sigmoid(output)
+            probs_pred = torch.sigmoid(output)
 
             mask_pred = (probs_pred > 0.5).float()
             # compute the Dice score

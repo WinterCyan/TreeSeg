@@ -20,13 +20,8 @@ from unet_repo import UNet
 # dir_img = Path('/Users/wintercyan/code-resource/car-seg/train')
 # dir_mask = Path('/Users/wintercyan/code-resource/car-seg/train_masks')
 
-dir_dataset = Path("/home/lenovo/treeseg-dataset/full_process/sample_128")
+dir_dataset = Path('/Users/winter/Downloads/temp')
 dir_checkpoint = Path('./checkpoints/')
-
-# TODO: 
-''' model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, specificity, sensitivity, accuracy])
-    model = UNet([config.BATCH_SIZE, *config.input_shape],config.input_label_channel)
-'''
 
 def train_net(
         net,
@@ -91,6 +86,8 @@ def train_net(
     global_step = 0
 
     division_step = (n_train // (10 * batch_size))
+    if division_step == 0:
+        division_step = 1
 
     # 5. Begin training
     for epoch in range(1, epochs+1):
@@ -107,18 +104,6 @@ def train_net(
 
                 input_image = torch.concat((pan_batch, ndvi_batch), dim=1)
                 target_tensor = torch.concat((annotation_batch, boundary_batch), dim=1)
-
-# ------------------------------- wintercyan comment -------------------------------
-# dataset create finished.
-# the "boundary" label usage: calculate weighted-tversky loss [losses.py].
-# TODO 1: implement tversky loss with "boundary" imgs, implement metrices, monitor change curve.
-# TODO 2: iaa augmentation implementation.
-# TODO 3: training schema reproduce.
-#                           |
-#                           |
-#                           |
-#                           |
-#                           |---> go on here...
                 assert input_image.shape[1] == net.n_channels, \
                     f'Network has been defined with {net.n_channels} input channels, ' \
                     f'but loaded images have {input_image.shape[1]} channels. Please check that ' \
@@ -155,14 +140,16 @@ def train_net(
                         histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
                         histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
-                    val_score = evaluate(net, val_loader, device)
+                    eval_result = evaluate(net, val_loader, device, amp)
+                    val_score = eval_result['dice_score']
                     scheduler.step(val_score)
 
                     logging.info('Validation Dice score: {}'.format(val_score))
                     experiment.log({
                         'learning rate': optimizer.param_groups[0]['lr'],
                         'validation Dice': val_score,
-                        'images': wandb.Image(input_image.cpu()),
+                        'pan images': wandb.Image(pan_batch.cpu()),
+                        'ndvi images': wandb.Image(ndvi_batch.cpu()),
                         'masks': {
                             'true': wandb.Image(annotation_batch.float().cpu()),
                             'pred': wandb.Image(direct_output.float().cpu()),
@@ -180,8 +167,8 @@ def train_net(
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
-    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
+    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=50, help='Number of epochs')
+    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=4, help='Batch size')
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
@@ -226,7 +213,7 @@ if __name__ == '__main__':
             batch_size=args.batch_size,
             learning_rate=args.lr,
             device=device,
-            img_scale=args.scale,
+            # img_scale=args.scale,
             val_percent=args.val / 100,
             amp=args.amp
         )

@@ -144,3 +144,7 @@ standalone/segmap_file
 
 # wandb
 wandb/
+
+# train files
+checkpoints/
+*.pth
