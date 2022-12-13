@@ -14,7 +14,7 @@ from tqdm import tqdm
 # from utils.data_loading import BasicDataset, CarvanaDataset
 from treeseg_dataset import TreeDataset, BasicDataset
 from unet_repo import dice_loss
-from evaluate import evaluate
+from torch_eval import evaluate
 from unet_repo import UNet
 
 # dir_img = Path('/Users/wintercyan/code-resource/car-seg/train')
@@ -23,6 +23,10 @@ from unet_repo import UNet
 dir_dataset = Path("/home/lenovo/treeseg-dataset/full_process/sample_128")
 dir_checkpoint = Path('./checkpoints/')
 
+# TODO: 
+''' model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, specificity, sensitivity, accuracy])
+    model = UNet([config.BATCH_SIZE, *config.input_shape],config.input_label_channel)
+'''
 
 def train_net(
         net,

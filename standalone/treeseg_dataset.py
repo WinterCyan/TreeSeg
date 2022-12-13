@@ -8,7 +8,10 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
+from PIL.Image import open as Imgopen
 from torch.utils.data import Dataset
+import wandb
+from tqdm import tqdm
 
 
 class BasicDataset(Dataset):
@@ -56,7 +59,7 @@ class BasicDataset(Dataset):
         elif ext in ['.pt', '.pth']:
             return Image.fromarray(torch.load(filename).numpy())
         else:
-            return Image.open(filename)
+            return Imgopen(filename)
 
     def __getitem__(self, idx):
         name = self.ids[idx]
@@ -86,46 +89,80 @@ class CarvanaDataset(BasicDataset):
 
 
 class TreeDataset(Dataset):
-    def __init__(self, dataset_dir, img_type='.png'):
+    def __init__(self, dataset_dir, img_type='.png', annotation_thr=0.02):
         # dataset_dir contains [pan, ndvi, boundary, annotation] imgs
         super(TreeDataset).__init__()
         self.dataset_shape = (256,256)
+        self.thr = annotation_thr
 
         self.dataset_dir = Path(dataset_dir)
-        self.suffix_names = [f.replace('pan', '') for f in listdir(dataset_dir) if f.startswith('pan-') and f.endswith(img_type)]
+        suffix_names = [f.replace('pan', '') for f in listdir(dataset_dir) if f.startswith('pan-') and f.endswith(img_type)]
+        self.valid_names = self.mean_filter_out(suffix_names)
 
     def __len__(self):
-        return len(self.suffix_names)
+        return len(self.valid_names)
+
+    def mean_filter_out(self, names):
+        valid_names = []
+        for n in names:
+            annotation_arr = np.asarray(Imgopen(pjoin(self.dataset_dir, f'annotation{n}')))
+            if np.mean(annotation_arr) >= self.thr:
+                valid_names.append(n)
+        return valid_names
 
     @staticmethod
-    def preprocess(pil_img, resize_shape, is_mask=False):
-        assert resize_shape.isinstance(tuple) and len(resize_shape)==2
-        pil_img = pil_img.resize(resize_shape, resample=Image.NEAREST if is_mask else Image.BICUBIC)
-        img_ndarray = np.asarray(pil_img)
-        print(f"img arr: \n{img_ndarray}")
+    def preprocess(pil_img, resize_shape, is_mask, polarize=False):
+        pil_img = pil_img.resize(resize_shape, resample=Image.NEAREST if is_mask else Image.BILINEAR)
+        img_ndarray = np.array(pil_img)
 
-        if not is_mask:
-            if img_ndarray.ndim == 2:
-                img_ndarray = img_ndarray[np.newaxis, ...]
-            else:
-                img_ndarray = img_ndarray.transpose((2, 0, 1))
+        # transpose for 2-channel or 3-channel img
+        if img_ndarray.ndim == 2:
+            img_ndarray = img_ndarray[np.newaxis, ...]
+        else:
+            img_ndarray = img_ndarray.transpose((2, 0, 1))
 
-            img_ndarray = img_ndarray / 255
-        
-        print(f"returned arr: \n{img_ndarray}")
+        # polarize boundary
+        if polarize:
+            img_ndarray[img_ndarray>=0.5] = 10
+            img_ndarray[img_ndarray<0.5] = 1
+
         return img_ndarray
 
     def __getitem__(self, index):
-        name = self.suffix_names[index]
-        pan = self.preprocess(Image.open(pjoin(self.dataset_dir, f"pan{name}")), self.dataset_shape, False)
-        ndvi = self.preprocess(Image.open(pjoin(self.dataset_dir, f"ndvi{name}")), self.dataset_shape, False)
-        annotation = self.preprocess(Image.open(pjoin(self.dataset_dir, f"annotation{name}")), self.dataset_shape, True)
-        boundary = self.preprocess(Image.open(pjoin(self.dataset_dir, f"boundary{name}")), self.dataset_shape, True)
+        name = self.valid_names[index]
+        pan = self.preprocess(Imgopen(pjoin(self.dataset_dir, f"pan{name}")), self.dataset_shape, is_mask=False, polarize=False)
+        ndvi = self.preprocess(Imgopen(pjoin(self.dataset_dir, f"ndvi{name}")), self.dataset_shape, is_mask=False, polarize=False)
+        annotation = self.preprocess(Imgopen(pjoin(self.dataset_dir, f"annotation{name}")), self.dataset_shape, is_mask=True, polarize=False)
+        boundary = self.preprocess(Imgopen(pjoin(self.dataset_dir, f"boundary{name}")), self.dataset_shape, is_mask=True, polarize=True)
 
         return {
             # is_contiguous直观的解释是Tensor底层一维数组元素的存储顺序与Tensor按行优先一维展开的元素顺序是否一致。
-            'pan': torch.as_tensor(pan.copy()).float().contiguous(),
-            'ndvi': torch.as_tensor(ndvi.copy()).float().contiguous(),
-            'annotation': torch.as_tensor(annotation.copy()).long().contiguous(),
-            'boundary': torch.as_tensor(boundary.copy()).long().contiguous()
+            'pan': torch.as_tensor(pan.copy()),
+            'ndvi': torch.as_tensor(ndvi.copy()),
+            'annotation': torch.as_tensor(annotation.copy()),
+            'boundary': torch.as_tensor(boundary.copy())
         }
+
+if __name__ == '__main__':
+    wandb.init()
+
+    dir = "/Users/winter/Downloads/temp"
+    dataset = TreeDataset(dir)
+    print(len(dataset))
+    loader = DataLoader(dataset, shuffle=True, batch_size=4, num_workers=4, pin_memory=True)
+    for i,batch in enumerate(tqdm(loader)):
+        print(f'pan min-max: {torch.min(batch["pan"])}, {torch.max(batch["pan"])}')
+        print(f'ndvi min-max: {torch.min(batch["ndvi"])}, {torch.max(batch["ndvi"])}')
+        print(f'anno unique: {np.unique(batch["annotation"])}')
+        print(f'bound unique: {np.unique(batch["boundary"])}')
+        log_img_pan = wandb.Image(batch['pan'], caption='pan')
+        log_img_ndvi = wandb.Image(batch['ndvi'], caption='ndvi')
+        log_img_annotation = wandb.Image(batch['annotation'], caption='annotation')
+        log_img_boundary = wandb.Image(batch['boundary'], caption='boundary')
+
+        wandb.log({
+            'pan': log_img_pan,
+            'ndvi': log_img_ndvi,
+            'annotation': log_img_annotation,
+            'boundary': log_img_boundary
+        })

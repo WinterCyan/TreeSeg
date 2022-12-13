@@ -140,4 +140,7 @@ patches256/
 standalone/segmap_file
 
 # macos
-.DS_Store
+/.DS_Store
+
+# wandb
+wandb/

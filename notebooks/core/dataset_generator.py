@@ -90,10 +90,10 @@ class DataGenerator():
             patches.append(patch)
         data = np.array(patches)
 
-        img = data[..., self.input_image_channel]
-        ann_joint = data[..., self.annotation_channel]
+        img = data[..., self.input_image_channel] # [0,1]
+        ann_joint = data[..., self.annotation_channel] # [2,3]
         # print(f'---------------mean:{np.mean(img)}, var:{np.var(img)}')
-        return (img, ann_joint)
+        return (img, ann_joint)  # returned: [pan,ndvi,annotation,weight]
 #     print("Wrote {} random patches to {} with patch size {}".format(count,write_dir,patch_size))
 
     # Normalization takes a probability between 0 and 1 that an image will be locally normalized.
@@ -107,7 +107,9 @@ class DataGenerator():
         seq = imageAugmentationWithIAA()
 
         while True:
+            # X: pan+ndvi, y: anno+weight
             X, y = self.random_patch(BATCH_SIZE, normalize)
+            # TODO: augment method
             if self.augmenter == 'iaa':
                 seq_det = seq.to_deterministic()
                 X = seq_det.augment_images(X)
@@ -124,15 +126,18 @@ class DataGenerator():
 
                 ann_joint = np.concatenate((ann,weights), axis=-1)
                 yield X, ann_joint
+            # if not augmented
             else:
                 # y would have two channels, i.e. annotations and weights.
                 ann =  y[...,[0]]
                 #boundaries have a weight of 10 other parts of the image has weight 1
                 weights = y[...,[1]]
+                # polarize weight
                 weights[weights>=0.5] = 10
                 weights[weights<0.5] = 1
 
                 ann_joint = np.concatenate((ann,weights), axis=-1)
+                # X: pan+ndvi, ann_joint: anno+weight(polarized)
                 yield X, ann_joint
 
 
