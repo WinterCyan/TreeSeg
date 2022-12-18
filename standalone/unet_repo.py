@@ -121,23 +121,21 @@ class WeightedTverskyLoss(nn.Module):
         inputs is output before sigmoid (not probs)
         targets contains annotation & weight
         """
-        print(f'tversky-inputs: {inputs.shape}, targets: {targets.shape}')
 
         assert targets.shape[1] == 2, "targets channel not 2"
         #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = torch.sigmoid(inputs)       
+        inputs = torch.sigmoid(inputs)
 
         
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
         labels = targets[:,0,:,:].unsqueeze(1)
         weights = targets[:,1,:,:].unsqueeze(1)
-        print(f'lables: {labels.shape}, weights: {weights.shape}')
         labels = labels.contiguous().view(-1)
         weights = weights.contiguous().view(-1)
         
         #True Positives, False Positives & False Negatives
-        TP = (inputs * labels * weights).sum()    
+        TP = (inputs * labels * weights).sum()
         FP = ((1-labels) * inputs * weights).sum()
         FN = (labels * (1-inputs) * weights).sum()
 
@@ -162,7 +160,7 @@ def dice_coef(input: Tensor, target: Tensor, reduce_batch_first: bool = False, e
     assert input.size() == target.size()
     assert input.dim() == 3 or not reduce_batch_first
 
-    sum_dim = (-1, -2) if input.dim() == 2 or not reduce_batch_first else (-1, -2, -3)
+    sum_dim = (-1, -2) if input.dim() == 3 or not reduce_batch_first else (-1, -2, -3)
 
     inter = 2 * (input * target).sum(dim=sum_dim)
     sets_sum = input.sum(dim=sum_dim) + target.sum(dim=sum_dim)
@@ -174,9 +172,9 @@ def dice_coef(input: Tensor, target: Tensor, reduce_batch_first: bool = False, e
 # def dice_loss(probs, label):
 #     return 1 - dice_coef(probs, label)
 
-def dice_loss(input: Tensor, target: Tensor, multiclass: bool = False):
+def dice_loss(input: Tensor, target: Tensor):
     # Dice loss (objective to minimize) between 0 and 1
-    return 1 - dice_coef(input, target, reduce_batch_first=True)
+    return 1 - dice_coef(input, target, reduce_batch_first=False)
 
 # calculate TP, FP, TN, FN: label is 0-1 annotation, probs is predicted probs, range[0,1]
 def true_positives(probs, label):

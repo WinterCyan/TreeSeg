@@ -7,6 +7,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
+# ----------------------------------------
+# 因为默认的file_descriptor共享策略使用文件描述符作为共享内存句柄，并且当DataLoader上有太多批次时，这将达到限制。
+# 要解决此问题，您可以通过将其添加到脚本来切换到file_system策略。
+from torch import multiprocessing
+multiprocessing.set_sharing_strategy('file_system')
+# ----------------------------------------
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
@@ -20,7 +26,8 @@ from unet_repo import UNet
 # dir_img = Path('/Users/wintercyan/code-resource/car-seg/train')
 # dir_mask = Path('/Users/wintercyan/code-resource/car-seg/train_masks')
 
-dir_dataset = Path('/Users/winter/Downloads/temp')
+dir_dataset = Path('/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm')
+# dir_dataset = Path('/home/lenovo/treeseg-dataset/full_process/temp')
 dir_checkpoint = Path('./checkpoints/')
 
 def train_net(
@@ -48,7 +55,7 @@ def train_net(
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 3. Create data loaders
-    loader_args = dict(batch_size=batch_size, num_workers=4, pin_memory=True)
+    loader_args = dict(batch_size=batch_size, num_workers=8, pin_memory=True)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
@@ -85,7 +92,9 @@ def train_net(
     criterion = WeightedTverskyLoss()
     global_step = 0
 
-    division_step = (n_train // (10 * batch_size))
+    log_freq_epoch = 3
+    save_freq_epoch = 20
+    division_step = (n_train // (log_freq_epoch * batch_size))
     if division_step == 0:
         division_step = 1
 
@@ -102,16 +111,16 @@ def train_net(
                 annotation_batch = batch['annotation']
                 boundary_batch = batch['boundary']
 
+                pan_batch = pan_batch.to(device=device, dtype=torch.float32)
+                ndvi_batch = ndvi_batch.to(device=device, dtype=torch.float32)
+                annotation_batch = annotation_batch.to(device=device, dtype=torch.float32)
+                boundary_batch = boundary_batch.to(device=device, dtype=torch.float32)
                 input_image = torch.concat((pan_batch, ndvi_batch), dim=1)
                 target_tensor = torch.concat((annotation_batch, boundary_batch), dim=1)
                 assert input_image.shape[1] == net.n_channels, \
                     f'Network has been defined with {net.n_channels} input channels, ' \
                     f'but loaded images have {input_image.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'
-
-                input_image = input_image.to(device=device, dtype=torch.float32)
-                annotation_batch = annotation_batch.to(device=device, dtype=torch.float32)
-                boundary_batch = boundary_batch.to(device=device, dtype=torch.float32)
 
                 with torch.cuda.amp.autocast(enabled=amp):
                     direct_output = net(input_image)
@@ -159,7 +168,7 @@ def train_net(
                         **histograms
                     })
 
-        if save_checkpoint:
+        if save_checkpoint and epoch%save_freq_epoch==0:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
@@ -167,7 +176,7 @@ def train_net(
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=50, help='Number of epochs')
+    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=100, help='Number of epochs')
     parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=4, help='Batch size')
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')

@@ -112,7 +112,7 @@ class TreeDataset(Dataset):
 
     @staticmethod
     def preprocess(pil_img, resize_shape, is_mask, polarize=False):
-        pil_img = pil_img.resize(resize_shape, resample=Image.NEAREST if is_mask else Image.BILINEAR)
+        pil_img = pil_img.resize(resize_shape, resample=Image.Resampling.NEAREST if is_mask else Image.Resampling.BILINEAR)
         img_ndarray = np.array(pil_img)
 
         # transpose for 2-channel or 3-channel img
@@ -146,15 +146,23 @@ class TreeDataset(Dataset):
 if __name__ == '__main__':
     wandb.init()
 
-    dir = "/Users/winter/Downloads/temp"
+    dir = "/home/lenovo/treeseg-dataset/full_process/temp"
+    # dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
     dataset = TreeDataset(dir)
     print(len(dataset))
-    loader = DataLoader(dataset, shuffle=True, batch_size=4, num_workers=4, pin_memory=True)
+    loader = DataLoader(dataset, shuffle=True, batch_size=4, num_workers=4, pin_memory=False)
     for i,batch in enumerate(tqdm(loader)):
-        print(f'pan min-max: {torch.min(batch["pan"])}, {torch.max(batch["pan"])}')
-        print(f'ndvi min-max: {torch.min(batch["ndvi"])}, {torch.max(batch["ndvi"])}')
-        print(f'anno unique: {np.unique(batch["annotation"])}')
-        print(f'bound unique: {np.unique(batch["boundary"])}')
+        # print(f'pan min-max: {torch.min(batch["pan"])}, {torch.max(batch["pan"])}')
+        # print(f'ndvi min-max: {torch.min(batch["ndvi"])}, {torch.max(batch["ndvi"])}')
+        # print(f'anno unique: {np.unique(batch["annotation"])}')
+        # print(f'bound unique: {np.unique(batch["boundary"])}')
+
+        pan_batch = batch['pan']
+        ndvi_batch = batch['ndvi']
+        annotation_batch = batch['annotation']
+        boundary_batch = batch['boundary']
+        print(f'pan ndvi anno boundary | devices: {pan_batch.device},{ndvi_batch.device},{annotation_batch.device},{boundary_batch.device}')
+
         log_img_pan = wandb.Image(batch['pan'], caption='pan')
         log_img_ndvi = wandb.Image(batch['ndvi'], caption='ndvi')
         log_img_annotation = wandb.Image(batch['annotation'], caption='annotation')
