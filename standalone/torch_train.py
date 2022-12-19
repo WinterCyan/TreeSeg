@@ -1,8 +1,6 @@
 import argparse
 import logging
-import sys
 from pathlib import Path
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,30 +15,26 @@ from torch import optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
-# from utils.data_loading import BasicDataset, CarvanaDataset
 from treeseg_dataset import TreeDataset, BasicDataset
 from unet_repo import dice_loss, WeightedTverskyLoss
 from torch_eval import evaluate
 from unet_repo import UNet
 
-# dir_img = Path('/Users/wintercyan/code-resource/car-seg/train')
-# dir_mask = Path('/Users/wintercyan/code-resource/car-seg/train_masks')
-
-dir_dataset = Path('/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm')
-# dir_dataset = Path('/home/lenovo/treeseg-dataset/full_process/temp')
-dir_checkpoint = Path('./checkpoints/')
-
 def train_net(
         net,
         device,
+        dir_dataset:str,
+        dir_model:str,
         epochs: int = 5,
         batch_size: int = 1,
         learning_rate: float = 1e-5,
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
-        # img_scale: float = 0.5,
-        amp: bool = False
+        amp: bool = False,
     ):
+
+    dir_model = dir_model.rstrip('/')
+
     # 1. Create dataset
     try:
         # dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
@@ -169,8 +163,8 @@ def train_net(
                     })
 
         if save_checkpoint and epoch%save_freq_epoch==0:
-            Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
-            torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
+            Path(dir_model).mkdir(parents=True, exist_ok=True)
+            torch.save(net.state_dict(), str(dir_model / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
 
 
@@ -187,6 +181,8 @@ def get_args():
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--classes', '-c', type=int, default=1, help='Number of classes')
+    parser.add_argument('--dataset_dir', type=str)
+    parser.add_argument('--model_dir', type=str)
 
     return parser.parse_args()
 
@@ -219,10 +215,11 @@ if __name__ == '__main__':
         train_net(
             net=net,
             epochs=args.epochs,
+            dir_dataset=args.dir_dataset,
+            dir_model=args.dir_model,
             batch_size=args.batch_size,
             learning_rate=args.lr,
             device=device,
-            # img_scale=args.scale,
             val_percent=args.val / 100,
             amp=args.amp
         )

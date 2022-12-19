@@ -9,6 +9,7 @@
 # data_root="/home/lenovo/treeseg-dataset/full_process"
 data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 # data_root="/home/lenovo/treeseg-dataset/inference/all-views"
+proj_root="/home/lenovo/code/TreeSeg"
 
 # -------------------------- preprocess --------------------------
 # python3 -W ignore split_merge_pipeline.py \
@@ -41,6 +42,11 @@ data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 #     --split_unit 108 \
 #     --norm_mode after_split
 
+# -------------------------- train --------------------------
+# python3 torch_train.py \
+#     --dataset_dir $data_root/... \
+#     --model_dir $proj_root/...
+
 # -------------------------- split inference --------------------------
 # python3 split_merge_pipeline.py \
 #     --task split_inference \
@@ -61,18 +67,18 @@ data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 #     --split_unit 128 \
 #     --norm_mode no_norm
 
-# # -------------------------- inference --------------------------
-# python3 split_merge_pipeline.py \
-#     --task inference \
-#     --model_path /home/lenovo/code/TreeSeg/notebooks/saved_models/UNet/no-norm-model-1209.h5 \
-#     --sample_dir $data_root/inference_sample_128_nonorm \
-#     --result_dir $data_root/inference_result_128_nonorm \
+# -------------------------- inference --------------------------
+python3 split_merge_pipeline.py \
+    --task inference \
+    --model_path $proj_root/checkpoints/nonorm.pth \
+    --sample_dir $data_root/inference_sample_128_nonorm \
+    --result_dir $data_root/inference_result_128_nonorm
 
 # -------------------------- merge --------------------------
-python3 split_merge_pipeline.py \
-    --task merge \
-    --input_dir $data_root/inference_sample_128_nonorm \
-    --result_dir $data_root/inference_result_128_nonorm \
-    --split_unit 128 \
-    --merge_dir $data_root/merge_result_128_nonorm \
-    --origin_tif $data_root/tif/pan-0.tif
+# python3 split_merge_pipeline.py \
+#     --task merge \
+#     --input_dir $data_root/inference_sample_128_nonorm \
+#     --result_dir $data_root/inference_result_128_nonorm \
+#     --split_unit 128 \
+#     --merge_dir $data_root/merge_result_128_nonorm \
+#     --origin_tif $data_root/tif/pan-0.tif
