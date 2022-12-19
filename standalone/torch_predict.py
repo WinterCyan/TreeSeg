@@ -9,9 +9,8 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from utils.data_loading import BasicDataset
+from treeseg_dataset import TreeDataset
 from unet_repo import UNet
-from utils.utils import plot_img_and_mask
 
 def predict_img(net,
                 full_img,
@@ -19,30 +18,24 @@ def predict_img(net,
                 scale_factor=1,
                 out_threshold=0.5):
     net.eval()
-    img = torch.from_numpy(BasicDataset.preprocess(full_img, scale_factor, is_mask=False))
+    img = torch.from_numpy(TreeDataset.preprocess(full_img, scale_factor, is_mask=False))
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 
     with torch.no_grad():
         output = net(img)
-
-        if net.n_classes > 1:
-            probs = F.softmax(output, dim=1)[0]
-        else:
-            probs = torch.sigmoid(output)[0]
+        probs = torch.sigmoid(output)[0]
 
         tf = transforms.Compose([
             transforms.ToPILImage(),
+            # ?
             transforms.Resize((full_img.size[1], full_img.size[0])),
             transforms.ToTensor()
         ])
 
         full_mask = tf(probs.cpu()).squeeze()
 
-    if net.n_classes == 1:
-        return (full_mask > out_threshold).numpy()
-    else:
-        return F.one_hot(full_mask.argmax(dim=0), net.n_classes).permute(2, 0, 1).numpy()
+    return (full_mask > out_threshold).numpy()
 
 
 def get_args():
@@ -110,7 +103,3 @@ if __name__ == '__main__':
             result = mask_to_image(mask)
             result.save(out_filename)
             logging.info(f'Mask saved to {out_filename}')
-
-        if args.viz:
-            logging.info(f'Visualizing results for image {filename}, close to continue...')
-            plot_img_and_mask(img, mask)

@@ -26,6 +26,9 @@ import PIL.ImageDraw
 from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import torch
+from unet_repo import UNet
+from treeseg_dataset import TreeDataset
 # TODO: modify model_inference, use torch model (model save & load)
 # from tensorflow.keras.optimizers import Adam, Adadelta, Adagrad, Nadam
 # from tensorflow.keras.models import load_model
@@ -525,16 +528,13 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                     dst.write(boundary_sample, 1)
                     dst.close()
 
-def model_inference(model_path, sample_dir, result_dir):
+def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
-    # OPTIMIZER = adaDelta
-    LOSS = tversky 
-
-    # OPTIMIZER_NAME = 'AdaDelta'
-    # LOSS_NAME = 'weightmap_tversky'
-    model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
+    # model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
+    model = UNet(n_channels=2, n_classes=1)
+    model.load_state_dict(torch.load(model_path, map_location='cuda'))
     pan_full_names = [pjoin(sample_dir,n) for n in os.listdir(sample_dir) if (n.endswith(".png") and n.__contains__('pan'))]
 
 
@@ -542,17 +542,20 @@ def model_inference(model_path, sample_dir, result_dir):
         basename = os.path.basename(fn)
         pan_img_fn = fn
         ndvi_img_fn = fn.replace('pan', 'ndvi')
-        pan_img = Image.open(pan_img_fn).resize((256,256))
-        ndvi_img = Image.open(ndvi_img_fn).resize((256,256))
-        pan_arr = np.array(pan_img)
-        ndvi_arr = np.array(ndvi_img)
-        comb_img = np.transpose(np.stack((ndvi_arr, pan_arr),axis=0), axes=(1,2,0))
-        expand_img = comb_img[np.newaxis, :]
-        prediction = model.predict(expand_img, steps=1)
-        prediction[prediction>0.5]=1
-        prediction[prediction<=0.5]=0
-        prediction = np.squeeze(prediction)
-        seg_map = Image.fromarray((prediction*255).astype(np.uint8))
+        pan_img = TreeDataset.preprocess(Image.open(pan_img_fn), input_shape, False, False)
+        ndvi_img = TreeDataset.preprocess(Image.open(ndvi_img_fn), input_shape, False, False)
+        pan_tensor = torch.as_tensor(pan_img.copy())
+        ndvi_tensor = torch.as_tensor(ndvi_img.copy())
+        input_tensor = torch.concat((pan_tensor, ndvi_tensor), dim=0)
+        input_tensor = torch.unsqueeze(input_tensor, 0)
+        pred = model(input_tensor)
+        probs = torch.sigmoid(pred)
+        pred_mask = probs.detach()
+        pred_mask[pred_mask>=0.5] = 1
+        pred_mask[pred_mask<0.5] = 0
+        pred_mask = torch.squeeze(pred_mask)
+
+        seg_map = Image.fromarray((pred_mask*255).astype(np.uint8))
         seg_map.save(pjoin(result_dir, basename.replace('pan','segmap')))
 
 
@@ -619,36 +622,6 @@ def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir, merge_ti
         with rstopen(pjoin(save_dir, "merge-result-ndvi.tif"), 'w', **dst_pf) as dst:
             dst.write(total_ndvi_arr, 1)
             dst.close()
-
-
-    # print("saving partial maps...")
-    # grid = 5000
-    # partial_h = 3008
-    # partial_w = 4992
-
-    # partial_pan_pf = pan_pf
-    # partial_pan_pf['width'] = partial_w
-    # partial_pan_pf['height'] = partial_h
-    # partial_ndvi_pf = ndvi_pf
-    # partial_ndvi_pf['width'] = partial_w
-    # partial_ndvi_pf['height'] = partial_h
-
-    # for i in range(0, int(total_height/grid)):
-    #     for j in range(0, int(total_width/grid)):
-    #         partial_segmap_arr = total_segmap_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
-    #         partial_pan_arr = total_pan_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
-    #         partial_ndvi_arr = total_ndvi_arr[grid*i:grid*i+partial_h, grid*j:grid*j+partial_w]
-
-    #         partial_segmap = Image.fromarray(partial_segmap_arr.astype(np.uint8))
-    #         partial_segmap.save(pjoin(save_dir, f"merge_result_partial{i}-{j}-segmap.png"))
-
-    #         with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-pan.tif"), 'w', **partial_pan_pf) as dst:
-    #             dst.write(partial_pan_arr, 1)
-    #             dst.close()
-
-    #         with rstopen(pjoin(save_dir, f"merge_result_partial{i}-{j}-ndvi.tif"), 'w', **partial_ndvi_pf) as dst:
-    #             dst.write(partial_ndvi_arr, 1)
-    #             dst.close()
 
 def result_merge_tif(input_dir, map_size, save_dir):
     names = [os.path.basename(n) for n in os.listdir(input_dir) if n.endswith('pan0.png')]
@@ -789,6 +762,3 @@ if __name__ == '__main__':
             save_dir=args.merge_dir,
             merge_tif=args.merge_tif
         )
-
-    # inference()
-    # merge_results()
