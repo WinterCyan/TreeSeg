@@ -532,7 +532,6 @@ def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
-    # model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dice_coef, 'dice_loss':dice_loss, 'accuracy':accuracy , 'specificity': specificity, 'sensitivity':sensitivity}, compile=False)
     model = UNet(n_channels=2, n_classes=1)
     model.load_state_dict(torch.load(model_path, map_location='cuda'))
     pan_full_names = [pjoin(sample_dir,n) for n in os.listdir(sample_dir) if (n.endswith(".png") and n.__contains__('pan'))]
