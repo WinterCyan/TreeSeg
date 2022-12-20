@@ -533,7 +533,8 @@ def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
         os.makedirs(result_dir)
 
     model = UNet(n_channels=2, n_classes=1)
-    model.load_state_dict(torch.load(model_path, map_location='cuda'))
+    model = model.cuda()
+    model.load_state_dict(torch.load(model_path, map_location='cuda:0'))
     pan_full_names = [pjoin(sample_dir,n) for n in os.listdir(sample_dir) if (n.endswith(".png") and n.__contains__('pan'))]
 
 
@@ -543,18 +544,19 @@ def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
         ndvi_img_fn = fn.replace('pan', 'ndvi')
         pan_img = TreeDataset.preprocess(Image.open(pan_img_fn), input_shape, False, False)
         ndvi_img = TreeDataset.preprocess(Image.open(ndvi_img_fn), input_shape, False, False)
-        pan_tensor = torch.as_tensor(pan_img.copy())
-        ndvi_tensor = torch.as_tensor(ndvi_img.copy())
+        pan_tensor = torch.as_tensor(pan_img.copy()).cuda()
+        ndvi_tensor = torch.as_tensor(ndvi_img.copy()).cuda()
         input_tensor = torch.concat((pan_tensor, ndvi_tensor), dim=0)
         input_tensor = torch.unsqueeze(input_tensor, 0)
         pred = model(input_tensor)
+
         probs = torch.sigmoid(pred)
         pred_mask = probs.detach()
         pred_mask[pred_mask>=0.5] = 1
         pred_mask[pred_mask<0.5] = 0
         pred_mask = torch.squeeze(pred_mask)
 
-        seg_map = Image.fromarray((pred_mask*255).astype(np.uint8))
+        seg_map = Image.fromarray((pred_mask.cpu().numpy()*255).astype(np.uint8))
         seg_map.save(pjoin(result_dir, basename.replace('pan','segmap')))
 
 

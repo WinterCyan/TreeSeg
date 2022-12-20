@@ -12,7 +12,7 @@ data_root="/home/lenovo/treeseg-dataset/inference_train_data"
 proj_root="/home/lenovo/code/TreeSeg"
 
 # -------------------------- preprocess --------------------------
-# python3 -W ignore split_merge_pipeline.py \
+# python3 -W ignore split_infer_merge_pipeline.py \
 #     --task preprocess_train \
 #     --tif_dir $data_root/tif \
 #     --area_polygon_dir $data_root/shp \
@@ -21,21 +21,21 @@ proj_root="/home/lenovo/code/TreeSeg"
 
 
 # -------------------------- split train --------------------------
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_train \
 #     --interm_png_dir $data_root/interm_png \
 #     --sample_dir $data_root/sample_256 \
 #     --split_unit 256 \
 #     --norm_mode after_split
 
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_train \
 #     --interm_png_dir $data_root/interm_png_nonorm \
 #     --sample_dir $data_root/sample_128_afternorm \
 #     --split_unit 128 \
 #     --norm_mode after_split
 
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_train \
 #     --interm_png_dir $data_root/interm_png \
 #     --sample_dir $data_root/sample_108 \
@@ -48,19 +48,19 @@ proj_root="/home/lenovo/code/TreeSeg"
 #     --model_dir $proj_root/...
 
 # -------------------------- split inference --------------------------
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
 #     --sample_dir $data_root/inference_sample_256 \
 #     --split_unit 256
 
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
 #     --sample_dir $data_root/inference_sample_108 \
 #     --split_unit 108
 
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
 #     --tif_dir $data_root/tif \
 #     --sample_dir $data_root/inference_sample_128_nonorm \
@@ -68,14 +68,14 @@ proj_root="/home/lenovo/code/TreeSeg"
 #     --norm_mode no_norm
 
 # -------------------------- inference --------------------------
-python3 split_merge_pipeline.py \
+python3 split_infer_merge_pipeline.py \
     --task inference \
     --model_path $proj_root/checkpoints/nonorm.pth \
     --sample_dir $data_root/inference_sample_128_nonorm \
-    --result_dir $data_root/inference_result_128_nonorm
+    --result_dir $data_root/torch_result/inference_result_128_nonorm
 
 # -------------------------- merge --------------------------
-# python3 split_merge_pipeline.py \
+# python3 split_infer_merge_pipeline.py \
 #     --task merge \
 #     --input_dir $data_root/inference_sample_128_nonorm \
 #     --result_dir $data_root/inference_result_128_nonorm \
