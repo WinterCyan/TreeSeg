@@ -4,12 +4,13 @@
 # except Exception:
 #     return []
 
-data_root="/home/lenovo/treeseg-dataset/full_process"
+data_root="/home/winter/code-resource/treeseg/trainingdata"
+proj_root="/home/winter/code/TreeSeg"
 
 # -------------------------- preprocess --------------------------
-python3 -W ignore split_merge_pipeline.py \
+python3 -W ignore ../split_infer_merge_pipeline.py \
     --task preprocess_train \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
-    --area_range 120-150 \
-    --interm_png_dir $data_root/interm_png_nonorm
+    --area_range 200-300 \
+    --interm_png_dir $data_root/interm_png
