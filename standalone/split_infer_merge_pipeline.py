@@ -529,6 +529,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                     dst.close()
 
 def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
+    print('model inference...')
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 

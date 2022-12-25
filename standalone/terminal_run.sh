@@ -44,8 +44,8 @@ proj_root="/home/lenovo/code/TreeSeg"
 
 # -------------------------- train --------------------------
 # python3 torch_train.py \
-#     --dataset_dir $data_root/... \
-#     --model_dir $proj_root/...
+#     --dataset_dir $data_root/sample_128_afternorm \
+#     --model_dir $proj_root/checkpoints
 
 # -------------------------- split inference --------------------------
 # python3 split_infer_merge_pipeline.py \
@@ -60,25 +60,26 @@ proj_root="/home/lenovo/code/TreeSeg"
 #     --sample_dir $data_root/inference_sample_108 \
 #     --split_unit 108
 
-# python3 split_infer_merge_pipeline.py \
-#     --task split_inference \
-#     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_128_nonorm \
-#     --split_unit 128 \
-#     --norm_mode no_norm
+python3 split_infer_merge_pipeline.py \
+    --task split_inference \
+    --tif_dir $data_root/tif \
+    --sample_dir $data_root/inference_sample_128_beforenorm \
+    --split_unit 128 \
+    --norm_mode before_split
 
 # -------------------------- inference --------------------------
 python3 split_infer_merge_pipeline.py \
     --task inference \
-    --model_path $proj_root/checkpoints/nonorm.pth \
-    --sample_dir $data_root/inference_sample_128_nonorm \
-    --result_dir $data_root/torch_result/inference_result_128_nonorm
+    --model_path $proj_root/checkpoints/beforenorm.pth \
+    --sample_dir $data_root/inference_sample_128_beforenorm \
+    --result_dir $data_root/torch_result/inference_result_128_beforenorm
 
 # -------------------------- merge --------------------------
-# python3 split_infer_merge_pipeline.py \
-#     --task merge \
-#     --input_dir $data_root/inference_sample_128_nonorm \
-#     --result_dir $data_root/inference_result_128_nonorm \
-#     --split_unit 128 \
-#     --merge_dir $data_root/merge_result_128_nonorm \
-#     --origin_tif $data_root/tif/pan-0.tif
+python3 split_infer_merge_pipeline.py \
+    --task merge \
+    --input_dir $data_root/inference_sample_128_beforenorm \
+    --result_dir $data_root/torch_result/inference_result_128_beforenorm \
+    --split_unit 128 \
+    --merge_dir $data_root/torch_result/merge_result_128_beforenorm \
+    --merge_tif \
+    --origin_tif $data_root/tif/pan-0.tif
