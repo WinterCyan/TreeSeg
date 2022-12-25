@@ -215,8 +215,8 @@ if __name__ == '__main__':
         train_net(
             net=net,
             epochs=args.epochs,
-            dir_dataset=args.dir_dataset,
-            dir_model=args.dir_model,
+            dir_dataset=args.dataset_dir,
+            dir_model=args.model_dir,
             batch_size=args.batch_size,
             learning_rate=args.lr,
             device=device,
