@@ -10,8 +10,11 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
     interpolation: Optional. Image interpolation to use for display.
     """
     # print("shape: ", img.shape)
+    # (Batch, Height, Width, Channel)
+    # rows & cols: input img is a batch, so rows is batch_size, cols is channels
     cols = img.shape[-1]
     rows = img.shape[0]
+    # print(f"rows: {rows}, cols: {cols}")
     titles = titles if titles is not None else [""] * (rows*cols)
 
     if not os.path.exists(dir):
@@ -22,8 +25,8 @@ def display_images(img, titles=None, cmap=None, norm=None, interpolation=None, s
         for j in range(cols):
             plt.subplot(rows, cols, (i*cols) + j + 1)
             plt.axis('off')
-            #plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
+            plt.imshow(img[i,...,j], cmap=cmap, norm=norm, interpolation=interpolation)
             if save:
-                plt.imsave(fname=f"{dir}/disp{cmap}{norm}_{i}{j}.png", arr=img[i,...,j])
+                plt.imsave(fname=f"{dir}/disp_{cmap}_{i}{j}.png", arr=img[i,...,j])
     #plt.show()
 

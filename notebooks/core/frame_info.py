@@ -56,7 +56,7 @@ class FrameInfo:
         an = np.expand_dims(an, axis=-1)
         we = self.weight[i:i + img_size[0], j:j + img_size[1]]
         we = np.expand_dims(we, axis=-1)
-        comb_img = np.concatenate((im, an, we), axis=-1)
+        comb_img = np.concatenate((im, an, we), axis=-1)  # combine img: [pan,ndvi,annotation,weight]
         patch[:img_size[0], :img_size[1], ] = comb_img
         return (patch)
 

@@ -43,8 +43,8 @@ InteractiveShell.ast_node_interactivity = "all"
 config = UNetTraining.Configuration()
 
 frames = []
-
-all_files = os.listdir(config.base_dir)
+dataset_dir = "/media/lenovo/Elements SE/predict/resize1/"
+all_files = os.listdir(dataset_dir)
 print(f"all files: {len(all_files)}")
 
 # load all ndvi*.png
@@ -52,9 +52,9 @@ print(f"all files: {len(all_files)}")
 all_files_ndvi = [fn for fn in all_files if fn.__contains__(config.ndvi_fn) and fn.endswith(config.image_type)]#[0:1000]
 print(f"all ndvi: {len(all_files_ndvi)}")
 for i, fn in enumerate(all_files_ndvi):
-    ndvi_img = np.load(os.path.join(config.base_dir, fn))
+    ndvi_img = np.load(os.path.join(dataset_dir, fn))
     ndvi_img[ndvi_img<=0.5]=0
-    pan_img = np.load(os.path.join(config.base_dir, fn.replace(config.ndvi_fn,config.pan_fn)))
+    pan_img = np.load(os.path.join(dataset_dir, fn.replace(config.ndvi_fn,config.pan_fn)))
     comb_img = np.stack((ndvi_img, pan_img), axis=0)
     comb_img = np.transpose(comb_img, axes=(1,2,0)) #Channel at the end
 
@@ -89,7 +89,7 @@ chs = reduce(lambda a,b: a+str(b), chf, '')
 if not os.path.exists(config.model_path):
     os.makedirs(config.model_path)
 model_path = os.path.join(config.model_path,'trees_{}_{}_{}_{}_{}.h5'.format(timestr,OPTIMIZER_NAME,LOSS_NAME,chs,config.input_shape[0]))
-print(model_path)
+#print(model_path)
 
 # The weights without the model architecture can also be saved. Just saving the weights is more efficent.
 
@@ -132,8 +132,9 @@ model = load_model(model_path, custom_objects={'tversky': LOSS, 'dice_coef': dic
 
 model.compile(optimizer=OPTIMIZER, loss=LOSS, metrics=[dice_coef, dice_loss, accuracy, specificity, sensitivity])
 
+
 # Print one batch on the training/test data!
-for i in range(50):
+for i in range(len(all_files_ndvi)):
     test_images = next(test_generator)
     #5 images per row: pan, ndvi, label, weight, prediction
     print(test_images.shape)
@@ -145,4 +146,4 @@ for i in range(50):
     prediction[prediction<=0.5]=0
     # real_label[real_label>0.5]=1
     # real_label[real_label<=0.5]=0
-    display_images(np.concatenate((test_images, prediction), axis = -1),save=True,dir=f"/home/lenovo/treeseg-dataset/predictions-0925/{i}")
+    display_images(np.concatenate((test_images, prediction), axis = -1),cmap=i,save=True,dir=f"/media/lenovo/Elements SE/predict/result1/")

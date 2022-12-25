@@ -8,23 +8,23 @@ class Configuration:
     Configuration for the first notebook.
     Copy the config folder and define the paths to input and output data. Variables such as raw_ndvi_image_prefix may also need to be corrected if you are use a different source.
     '''
-    def __init__(self, folder, area_patt="training_area", poly_patt="training_polygon"):
-        rootdir = f"/home/winter/code-resources/treeseg"
+    def __init__(self, folder, area_patt, poly_patt):
+        rootdir = f"/home/lenovo/treeseg-dataset/preprocess/1014/{folder}/"
         # rootdir = f"/Users/wintercyan/LocalDocuments/treeseg-resource/full_area/"
         # For reading the training areas and polygons
-        self.training_base_dir = rootdir+"data"
+        self.training_base_dir = rootdir+"data/"
         self.training_area_fn = f'{area_patt}.shp'
         self.training_polygon_fn = f'{poly_patt}.shp'
 
         # For reading the VHR images
         self.bands = [0]
-        self.raw_image_base_dir = rootdir+"data"
+        self.raw_image_base_dir = rootdir+"data/"
         self.raw_image_file_type = '.tif'
-        self.raw_ndvi_image_prefix = 'ndvi'
-        self.raw_pan_image_prefix = 'pan'
+        self.raw_ndvi_image_prefix = 'ndvi_WGS84'
+        self.raw_pan_image_prefix = 'pan_WGS84'
 
         # For writing the extracted images and their corresponding annotations and boundary file
-        self.path_to_write = rootdir+"results"
+        self.path_to_write = rootdir+"results/"
         self.show_boundaries_during_processing = False
         self.extracted_file_type = '.png'
         self.extracted_ndvi_filename = 'ndvi'
