@@ -1,6 +1,8 @@
 import argparse
 import logging
 from pathlib import Path
+import os
+from os import path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -30,6 +32,7 @@ def train_net(
         learning_rate: float = 1e-5,
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
+        model_name: str = 'defaultname',
         amp: bool = False,
     ):
 
@@ -87,7 +90,7 @@ def train_net(
     global_step = 0
 
     log_freq_epoch = 3
-    save_freq_epoch = 20
+    save_freq_epoch = 1
     division_step = (n_train // (log_freq_epoch * batch_size))
     if division_step == 0:
         division_step = 1
@@ -163,8 +166,9 @@ def train_net(
                     })
 
         if save_checkpoint and epoch%save_freq_epoch==0:
-            Path(dir_model).mkdir(parents=True, exist_ok=True)
-            torch.save(net.state_dict(), str(dir_model / 'checkpoint_epoch{}.pth'.format(epoch)))
+            if not path.exists(dir_model):
+                os.makedirs(dir_model)
+            torch.save(net.state_dict(), f'{dir_model}/{model_name}_checkpoint_epoch{epoch}.pth')
             logging.info(f'Checkpoint {epoch} saved!')
 
 
@@ -183,6 +187,7 @@ def get_args():
     parser.add_argument('--classes', '-c', type=int, default=1, help='Number of classes')
     parser.add_argument('--dataset_dir', type=str)
     parser.add_argument('--model_dir', type=str)
+    parser.add_argument('--model_name', type=str, default='defaultname')
 
     return parser.parse_args()
 
@@ -221,6 +226,7 @@ if __name__ == '__main__':
             learning_rate=args.lr,
             device=device,
             val_percent=args.val / 100,
+            model_name=args.model_name,
             amp=args.amp
         )
     except KeyboardInterrupt:

@@ -256,7 +256,7 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
             tif & area & polygon filename patter: [pan-***.tif, ndvi-***.tif, area-***.shp/sbx..., polygon-***.shp/sbx...]
         sample_dir: folder to save samples, [pan, ndvi, annotation, weight]
         split_unit: pixel size of sample
-        norm_mode: norm image before/after split. Defaults to "after".
+        norm_mode: norm image before/after split. Defaults to "no_norm".
     """
 
     tif_dir = tif_dir.rstrip("/")
@@ -327,7 +327,7 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
 
         print("matching polygon and annotation finished.")
 
-def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="after_split"):
+def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="no_norm"):
     # read extracted png dataset, [pan, ndvi, annotation, boundary]
     # [pan,ndvi] -> [area 0, 1, ...] -> [pan/ndvi/anno/bound 0, 1, ...] -> [pan/ndvi/anno/bound 0_r0c0, 0_r0c1, ...]
     # a pair of tif -> multi areas   ->  multi png group (1 <-> 1 area)  ->  rows x cols square (1 <-> png group)
@@ -336,7 +336,8 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
 
     interm_png_dir = interm_png_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
-    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    assert norm_mode == "on_area" or norm_mode == "on_sample" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    print(f'split training samples, norm mode: {norm_mode}')
 
     if not os.path.exists(sample_dir):
         os.makedirs(sample_dir)
@@ -391,7 +392,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
         invalid_locs = ndvi_img==ndvi_invalid_v
         ndvi_img[invalid_locs] = 0
 
-        if norm_mode=="before_split":
+        if norm_mode=="on_area":
             pan_img = image_normalize(pan_img)
             ndvi_img = image_normalize(ndvi_img)
 
@@ -403,7 +404,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                 idx_str = f"r{r}c{c}"
                 pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                if norm_mode=="after_split":
+                if norm_mode=="on_sample":
                     pan_sample = image_normalize(pan_sample)
                     ndvi_sample = image_normalize(ndvi_sample)
                 annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
@@ -421,7 +422,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                     dst.write(boundary_sample, 1)
                     dst.close()
 
-def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_split"):
+def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="no_norm"):
     """read tif & split into pngs
 
     Args:
@@ -431,8 +432,8 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_sp
         norm_mode: norm image before/after split
     """
 
-    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
-    print(f'norm mode: {norm_mode}')
+    assert norm_mode == "on_area" or norm_mode == "on_sample" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    print(f'split inference samples, norm mode: {norm_mode}')
 
     if not os.path.exists(sample_dir):
         os.makedirs(sample_dir)
@@ -484,7 +485,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_sp
         # ndvi_arr[invalid_locs] = 0
         # print(f'ndvi min val: {np.min(ndvi_arr)}')
 
-        if norm_mode=="before_split":
+        if norm_mode=="on_area":
             pan_arr = image_normalize(pan_arr)
             ndvi_arr = image_normalize(ndvi_arr)
         height, width = pan_arr.shape
@@ -498,7 +499,7 @@ def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_sp
                 idx_str = f"r{r}c{c}"
                 pan_sample = pan_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 ndvi_sample = ndvi_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                if norm_mode=="after_split":
+                if norm_mode=="on_sample":
                     pan_sample = image_normalize(pan_sample)
                     ndvi_sample = image_normalize(ndvi_sample)
                 with rstopen(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
@@ -620,7 +621,7 @@ if __name__ == '__main__':
     parser.add_argument("--merge_dir", type=str)
     parser.add_argument("--origin_tif", type=str)
     parser.add_argument("--split_unit", type=int)
-    parser.add_argument("--norm_mode", type=str, default="after_split")
+    parser.add_argument("--norm_mode", type=str, default="no_norm")
     parser.add_argument("--merge_tif", action="store_true")
     args = parser.parse_args()
 
