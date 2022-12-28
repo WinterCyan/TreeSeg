@@ -1,13 +1,3 @@
-"""
-dataset preprocessing, split, (prediction), merge pipeline
-1. input: pan.tif, ndvi.tif
-2. tif -> read, normalization(BEFORE/AFTER split), write as png
-3. split, assign index, save as datdaset
-4. load dataset and inference
-5. merge results, annotation corresponding to img
-6. convert to shp, count tree
-"""
-
 import argparse
 import numpy as np
 import rasterio
@@ -29,18 +19,8 @@ from tqdm import tqdm
 import torch
 from unet_repo import UNet
 from treeseg_dataset import TreeDataset
-# TODO: modify model_inference, use torch model (model save & load)
-# from tensorflow.keras.optimizers import Adam, Adadelta, Adagrad, Nadam
-# from tensorflow.keras.models import load_model
-# from losses import *
-# from optimizers import *
 import warnings
 warnings.filterwarnings("ignore")
-
-# adaDelta = Adadelta(lr=1.0, rho=0.95, epsilon=None, decay=0.0)
-# adam = Adam(lr= 5.0e-05, decay= 0.0, beta_1= 0.9, beta_2= 0.999, epsilon= 1.0e-8)
-# nadam = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
-# adagrad = Adagrad(lr=0.01, epsilon=None, decay=0.0)
 
 def image_normalize(im, axis = (0,1), c = 1e-8):
     return (im - im.mean(axis)) / (im.std(axis) + c)
@@ -52,7 +32,8 @@ def calculateBoundaryWeight(polygonsInArea, scale_polygon = 1.5, output_plot = T
     # If there are polygons in a area, the boundary polygons return an empty geo dataframe
     if not polygonsInArea:
         return gps.GeoDataFrame({})
-    tempPolygonDf = pd.DataFrame(polygonsInArea)
+    # --------------------ALTER: add 'columns=list([])', handle useless columns--------------------
+    tempPolygonDf = pd.DataFrame(polygonsInArea, columns=list(['Id','geometry']))
     tempPolygonDf.reset_index(drop=True,inplace=True)
     tempPolygonDf = gps.GeoDataFrame(tempPolygonDf.drop(columns=['Id']))
     new_c = []
@@ -175,10 +156,11 @@ def rowColPolygons(areaDf, areaShape, profile, filename, outline, fill):
         json.dump({'Trees': polygons}, outfile)
     mask = drawPolygons(polygons,areaShape, outline=outline, fill=fill)    
     profile['dtype'] = rasterio.int16
+    profile['nodata'] = 0
     with rstopen(filename.replace('json', 'png'), 'w', **profile) as dst:
         dst.write(mask.astype(rasterio.int16), 1)
 
-def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter, normalize=False):
+def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imagesFilename, annotationFilename, boundaryFilename, bands, writeCounter):
     """
     Write the part of raw image that overlaps with a training area into a separate image file. 
     Use rowColPolygons to create and write annotation and boundary image from polygons in the training area.
@@ -188,10 +170,6 @@ def writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundar
             # Rasterio reads file channel first, so the sm[0] has the shape [1 or ch_count, x,y]
             # If raster has multiple channels, then bands will be [0, 1, ...] otherwise simply [0]
             dt = sm[0][band].astype(profile['dtype'])
-            if normalize: # Note: If the raster contains None values, then you should normalize it separately by calculating the mean and std without those values.
-                print('----------------norm when proprecess train----------------')
-                dt = image_normalize(dt, axis=None) #  Normalize the image along the width and height, and since here we only have one channel we pass axis as None
-            print(f"writing {imFn}-area{writeCounter}.png ...")
             with rstopen(pjoin(writePath, imFn+'-area{}.png'.format(writeCounter)), 'w', **profile) as dst:
                 print(f'when preprocess: min-max of dt: {np.min(dt)}, {np.max(dt)}')
                 dst.write(dt, 1) 
@@ -234,6 +212,7 @@ def findOverlap(img, areasWithPolygons, writePath, imageFilename, annotationFile
             profile['blockysize'] = 32
             profile['count'] = 1
             profile['dtype'] = rasterio.float32
+            profile['nodata'] = 0
             # writeExtractedImageAndAnnotation writes the image, annotation and boundaries and returns the counter of the next file to write. 
             writeCounter = writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imageFilename, annotationFilename, boundaryFilename, bands, writeCounter)
             overlapppedAreas.add(areaID)
@@ -269,94 +248,7 @@ def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writ
     if allAreas.difference(overlapppedAreas):
         print(f'Warning: Could not find a raw image correspoinding to {allAreas.difference(overlapppedAreas)} areas. Make sure that you have provided the correct paths!')
 
-def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="after_split"):
-    """read tif & split into pngs
-
-    Args:
-        tif_dir: folder contains ALL pan-ndvi tif pairs
-        sample_dir: folder contains ALL training/inference samples
-        split_unit: pixel size of split square
-        norm_mode: norm image before/after split
-    """
-
-    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
-    print(f'norm mode: {norm_mode}')
-
-    if not os.path.exists(sample_dir):
-        os.makedirs(sample_dir)
-
-    tif_dir = tif_dir.rstrip("/")
-    sample_dir = sample_dir.rstrip("/")
-    all_pan_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("pan") or name.__contains__("PAN")) and name.endswith(".tif")]
-    all_ndvi_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("ndvi") or name.__contains__("NDVI")) and name.endswith(".tif")]
-    for pan_item in all_pan_files_names:
-        assert all_ndvi_files_names.count(pan_item.replace("pan","ndvi")) or all_ndvi_files_names.count(pan_item.replace("PAN","NDVI")), "cannot pair up all tif pan & ndvi images!"
-    print(f"found {len(all_pan_files_names)} pairs of tif images in {tif_dir} ...")
-    for pan_item in all_pan_files_names:
-        pan_full_path = f"{tif_dir}/{pan_item}"
-        ndvi_item = ""
-        if pan_item.__contains__("pan"):
-            ndvi_item = pan_item.replace("pan", "ndvi")
-        elif pan_item.__contains__("PAN"):
-            ndvi_item = pan_item.replace("PAN", "NDVI")
-        assert ndvi_item != ""
-        ndvi_full_path = f"{tif_dir}/{ndvi_item}"
-        print(pan_full_path, ndvi_full_path)
-
-        pan_dataset = rstopen(pan_full_path)
-        pan_profile = pan_dataset.profile
-        ndvi_dataset = rstopen(ndvi_full_path)
-        ndvi_profile = ndvi_dataset.profile
-
-        pan_profile['dtype'] = rasterio.float32
-        pan_profile['height'] = split_unit
-        pan_profile['width'] = split_unit
-        pan_profile['blockxsize'] = 32
-        pan_profile['blockysize'] = 32
-        pan_profile['count'] = 1
-
-        ndvi_profile['dtype'] = rasterio.float32
-        ndvi_profile['height'] = split_unit
-        ndvi_profile['width'] = split_unit
-        ndvi_profile['blockxsize'] = 32
-        ndvi_profile['blockysize'] = 32
-        ndvi_profile['count'] = 1
-
-        pan_arr = pan_dataset.read(1).astype(pan_profile['dtype'])
-        ndvi_arr = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
-
-        ndvi_invalid_v = np.min(ndvi_arr)
-        invalid_locs = ndvi_arr==ndvi_invalid_v
-        ndvi_arr[invalid_locs] = 0
-        print(f'ndvi min val: {np.min(ndvi_arr)}')
-
-        if norm_mode=="before_split":
-            pan_arr = image_normalize(pan_arr)
-            ndvi_arr = image_normalize(ndvi_arr)
-        height, width = pan_arr.shape
-        print(f"read tif, shape: {height}x{width}")
-
-        split_rows = int(height/split_unit)
-        split_cols = int(width/split_unit)
-        print(f"spliting into {split_rows}x{split_cols} squares...")
-        for r in tqdm(range(split_rows)):
-            for c in range(split_cols):
-                idx_str = f"r{r}c{c}"
-                pan_sample = pan_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                ndvi_sample = ndvi_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                if norm_mode=="after_split":
-                    pan_sample = image_normalize(pan_sample)
-                    ndvi_sample = image_normalize(ndvi_sample)
-                with rstopen(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
-                    dst.write(pan_sample, 1)
-                    # print(f"max: {np.max(pan_sample)}, min: {np.min(pan_sample)}")
-                    dst.close()
-                with rstopen(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
-                    dst.write(ndvi_sample, 1)
-                    # print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
-                    dst.close()
-
-def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_png_dir, norm_mode="after_split"):
+def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, area_idx:list, interm_png_dir):
     """read tif, shp & split into training samples
 
     Args:
@@ -365,8 +257,11 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
             tif & area & polygon filename patter: [pan-***.tif, ndvi-***.tif, area-***.shp/sbx..., polygon-***.shp/sbx...]
         sample_dir: folder to save samples, [pan, ndvi, annotation, weight]
         split_unit: pixel size of sample
-        norm_mode: norm image before/after split. Defaults to "after".
+        norm_mode: norm image before/after split. Defaults to "no_norm".
     """
+
+    if area_range == 'list':
+        assert area_idx != None
 
     tif_dir = tif_dir.rstrip("/")
     area_polygon_dir = area_polygon_dir.rstrip("/")
@@ -374,8 +269,6 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
 
     if not os.path.exists(interm_png_dir):
         os.makedirs(interm_png_dir)
-
-    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
 
     # get tif pairs, for every pair of tif, find area & polygon shp.
     all_pan_filenames = [name for name in os.listdir(tif_dir) if name.startswith("pan-") and name.endswith(".tif")]
@@ -388,7 +281,10 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         assert all_area_filenames.count(pan_item.replace("pan","area").replace(".tif",".shp")), "cannot pair up all pan with area file!"
         assert all_polygon_filenames.count(pan_item.replace("pan","polygon").replace(".tif",".shp")), "cannot pair up all pan with polygon file!"
 
+    print(f'found a total of {len(all_pan_filenames)} pair of raw images to process!')
+
     for pan_item in all_pan_filenames:
+        print('-------------------------------------------')
         print(f"pan_item: {pan_item}")
         # pan_full_path = f"{tif_dir}/{pan_item}"
         # ndvi_full_path = f"{tif_dir}/{pan_item.replace('pan', 'ndvi')}"
@@ -406,35 +302,73 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         assert polygons.crs == areas.crs
 
         areas['id'] = range(areas.shape[0])
-        # ------------- for test -------------
-        if area_range != "all":
-            begin_idx = int(area_range.split("-")[0])
-            end_idx = int(area_range.split("-")[1])
-            assert begin_idx<=end_idx, "begin idx > end_idx!"
-            areas = areas[begin_idx:end_idx][:]
-        # ------------- for test -------------
-        areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
-        print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
-
         input_imgs = readInputImages(tif_dir, ".tif", "ndvi-", "pan-")
-        print(f'found a total of {len(input_imgs)} pair of raw images to process!')
 
-        write_counter = begin_idx
-        extractAreasThatOverlapWithTrainingData(
-            inputImages=input_imgs,
-            areasWithPolygons=areas_with_polygons,
-            writePath=interm_png_dir, 
-            ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
-            panFilename=f"{pan_item.replace('.tif','')}",
-            annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
-            boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
-            bands=[0],
-            writeCounter=write_counter
-        )
 
-        print("matching polygon and annotation finished.")
+        # -----------process per area------------
+        idx_list = None
+        if area_range == "all":
+            idx_list = list(range(len(areas)))
+        elif area_range == "list":
+            idx_list = [int(i) for i in area_idx]
+        else:
+            begin_n = int(area_range.split("-")[0])
+            end_n = int(area_range.split("-")[1])
+            idx_list = list(range(begin_n, end_n))
 
-def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="after_split"):
+        for idx in idx_list:
+            print(f'processing area {idx}...')
+            slice_areas = areas.iloc[[idx],[0,1,2]]
+            areas_with_polygons = dividePolygonsInTrainingAreas(polygons, slice_areas)
+            print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
+            write_counter = idx
+            extractAreasThatOverlapWithTrainingData(
+                inputImages=input_imgs,
+                areasWithPolygons=areas_with_polygons,
+                writePath=interm_png_dir, 
+                ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
+                panFilename=f"{pan_item.replace('.tif','')}",
+                annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
+                boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
+                bands=[0],
+                writeCounter=write_counter
+            )
+
+            print("matching polygon and annotation finished.")
+        # ---------------------------------------
+
+        # if area_range == "all":
+        #     begin_idx = 0
+        # elif area_range == "list":
+        #     idx_list = [int(i) for i in area_idx]
+        #     print(f'idx_list: {idx_list}')
+        #     areas = areas.iloc[idx_list,[0,1,2]]
+        # else:
+        #     begin_idx = int(area_range.split("-")[0])
+        #     end_idx = int(area_range.split("-")[1])
+        #     assert begin_idx<=end_idx, "begin idx > end_idx!"
+        #     areas = areas[begin_idx:end_idx][:]
+
+        # areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
+        # print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
+
+
+        # write_counter = begin_idx
+        # extractAreasThatOverlapWithTrainingData(
+        #     inputImages=input_imgs,
+        #     areasWithPolygons=areas_with_polygons,
+        #     writePath=interm_png_dir, 
+        #     ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
+        #     panFilename=f"{pan_item.replace('.tif','')}",
+        #     annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
+        #     boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
+        #     bands=[0],
+        #     writeCounter=write_counter
+        # )
+
+        # print("matching polygon and annotation finished.")
+
+def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="no_norm"):
     # read extracted png dataset, [pan, ndvi, annotation, boundary]
     # [pan,ndvi] -> [area 0, 1, ...] -> [pan/ndvi/anno/bound 0, 1, ...] -> [pan/ndvi/anno/bound 0_r0c0, 0_r0c1, ...]
     # a pair of tif -> multi areas   ->  multi png group (1 <-> 1 area)  ->  rows x cols square (1 <-> png group)
@@ -443,7 +377,8 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
 
     interm_png_dir = interm_png_dir.rstrip("/")
     sample_dir = sample_dir.rstrip("/")
-    assert norm_mode == "before_split" or norm_mode == "after_split" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    assert norm_mode == "on_area" or norm_mode == "on_sample" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    print(f'split training samples, norm mode: {norm_mode}')
 
     if not os.path.exists(sample_dir):
         os.makedirs(sample_dir)
@@ -498,7 +433,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
         invalid_locs = ndvi_img==ndvi_invalid_v
         ndvi_img[invalid_locs] = 0
 
-        if norm_mode=="before_split":
+        if norm_mode=="on_area":
             pan_img = image_normalize(pan_img)
             ndvi_img = image_normalize(ndvi_img)
 
@@ -510,7 +445,7 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                 idx_str = f"r{r}c{c}"
                 pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
                 ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                if norm_mode=="after_split":
+                if norm_mode=="on_sample":
                     pan_sample = image_normalize(pan_sample)
                     ndvi_sample = image_normalize(ndvi_sample)
                 annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
@@ -526,6 +461,95 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="af
                     dst.close()
                 with rstopen(f"{sample_dir}/{pan_item.replace('pan','boundary')}-{idx_str}.png", 'w', **boundary_profile) as dst:
                     dst.write(boundary_sample, 1)
+                    dst.close()
+
+def split_inference_samples(tif_dir, sample_dir, split_unit, norm_mode="no_norm"):
+    """read tif & split into pngs
+
+    Args:
+        tif_dir: folder contains ALL pan-ndvi tif pairs
+        sample_dir: folder contains ALL training/inference samples
+        split_unit: pixel size of split square
+        norm_mode: norm image before/after split
+    """
+
+    assert norm_mode == "on_area" or norm_mode == "on_sample" or norm_mode=="no_norm", "norm_mode argument NOT valid!"
+    print(f'split inference samples, norm mode: {norm_mode}')
+
+    if not os.path.exists(sample_dir):
+        os.makedirs(sample_dir)
+
+    tif_dir = tif_dir.rstrip("/")
+    sample_dir = sample_dir.rstrip("/")
+    all_pan_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("pan") or name.__contains__("PAN")) and name.endswith(".tif")]
+    all_ndvi_files_names = [name for name in os.listdir(tif_dir) if (name.__contains__("ndvi") or name.__contains__("NDVI")) and name.endswith(".tif")]
+    for pan_item in all_pan_files_names:
+        assert all_ndvi_files_names.count(pan_item.replace("pan","ndvi")) or all_ndvi_files_names.count(pan_item.replace("PAN","NDVI")), "cannot pair up all tif pan & ndvi images!"
+    print(f"found {len(all_pan_files_names)} pairs of tif images in {tif_dir} ...")
+    for pan_item in all_pan_files_names:
+        pan_full_path = f"{tif_dir}/{pan_item}"
+        ndvi_item = ""
+        if pan_item.__contains__("pan"):
+            ndvi_item = pan_item.replace("pan", "ndvi")
+        elif pan_item.__contains__("PAN"):
+            ndvi_item = pan_item.replace("PAN", "NDVI")
+        assert ndvi_item != ""
+        ndvi_full_path = f"{tif_dir}/{ndvi_item}"
+        print(pan_full_path, ndvi_full_path)
+
+        pan_dataset = rstopen(pan_full_path)
+        pan_profile = pan_dataset.profile
+        ndvi_dataset = rstopen(ndvi_full_path)
+        ndvi_profile = ndvi_dataset.profile
+
+        pan_profile['dtype'] = rasterio.float32
+        pan_profile['height'] = split_unit
+        pan_profile['width'] = split_unit
+        pan_profile['blockxsize'] = 32
+        pan_profile['blockysize'] = 32
+        pan_profile['count'] = 1
+        pan_profile['nodata'] = 0
+
+        ndvi_profile['dtype'] = rasterio.float32
+        ndvi_profile['height'] = split_unit
+        ndvi_profile['width'] = split_unit
+        ndvi_profile['blockxsize'] = 32
+        ndvi_profile['blockysize'] = 32
+        ndvi_profile['count'] = 1
+        ndvi_profile['nodata'] = 0
+
+        pan_arr = pan_dataset.read(1).astype(pan_profile['dtype'])
+        ndvi_arr = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
+
+        # ndvi_invalid_v = np.min(ndvi_arr)
+        # invalid_locs = ndvi_arr==ndvi_invalid_v
+        # ndvi_arr[invalid_locs] = 0
+        # print(f'ndvi min val: {np.min(ndvi_arr)}')
+
+        if norm_mode=="on_area":
+            pan_arr = image_normalize(pan_arr)
+            ndvi_arr = image_normalize(ndvi_arr)
+        height, width = pan_arr.shape
+        print(f"read tif, shape: {height}x{width}")
+
+        split_rows = int(height/split_unit)
+        split_cols = int(width/split_unit)
+        print(f"spliting into {split_rows}x{split_cols} squares...")
+        for r in tqdm(range(split_rows)):
+            for c in range(split_cols):
+                idx_str = f"r{r}c{c}"
+                pan_sample = pan_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                ndvi_sample = ndvi_arr[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                if norm_mode=="on_sample":
+                    pan_sample = image_normalize(pan_sample)
+                    ndvi_sample = image_normalize(ndvi_sample)
+                with rstopen(f"{sample_dir}/{idx_str}-{pan_item.replace('tif','png')}", 'w', **pan_profile) as dst:
+                    dst.write(pan_sample, 1)
+                    # print(f"max: {np.max(pan_sample)}, min: {np.min(pan_sample)}")
+                    dst.close()
+                with rstopen(f"{sample_dir}/{idx_str}-{ndvi_item.replace('tif','png')}", 'w', **ndvi_profile) as dst:
+                    dst.write(ndvi_sample, 1)
+                    # print(f"max: {np.max(ndvi_sample)}, min: {np.min(ndvi_sample)}")
                     dst.close()
 
 def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
@@ -560,14 +584,12 @@ def model_inference(model_path, sample_dir, result_dir, input_shape=(256,256)):
         seg_map = Image.fromarray((pred_mask.cpu().numpy()*255).astype(np.uint8))
         seg_map.save(pjoin(result_dir, basename.replace('pan','segmap')))
 
-
 def get_row_col(name:str):
     rc_str = name.split('-')[0]
     row_col = rc_str.replace('r', ' ').replace('c', ' ').split()
     row_col_int = (int(row_col[0]), int(row_col[1]))
     assert len(row_col_int) == 2
     return row_col_int
-
     
 def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir, merge_tif=False):
     names = [os.path.basename(n) for n in os.listdir(result_dir) if n.endswith('.png')]
@@ -625,73 +647,14 @@ def result_merge(input_dir, result_dir, origin_tif, map_size, save_dir, merge_ti
             dst.write(total_ndvi_arr, 1)
             dst.close()
 
-def result_merge_tif(input_dir, map_size, save_dir):
-    names = [os.path.basename(n) for n in os.listdir(input_dir) if n.endswith('pan0.png')]
-    
-    row_col_idx_list = [get_row_col(n) for n in names]
-    max_row = max([idx[0] for idx in row_col_idx_list])+1
-    max_col = max([idx[1] for idx in row_col_idx_list])+1
-    print(f"merging from {max_row}x{max_col} seg maps...")
-
-    (total_height, total_width) = (33705, 34659)
-    total_pan_arr = np.zeros((total_height, total_width))
-    total_ndvi_arr = np.zeros((total_height, total_width))
-
-    empty_count = 0
-    for n in tqdm(names):
-        pan_ds = rstopen(pjoin(input_dir, n))
-        ndvi_ds = rstopen(pjoin(input_dir, n.replace('pan', 'ndvi')))
-        pan_pf = pan_ds.profile
-        ndvi_pf = ndvi_ds.profile
-
-        pan_pf['dtype'] = rasterio.float32
-        pan_pf['height'] = total_height
-        pan_pf['width'] = total_width
-        pan_pf['blockxsize'] = 32
-        pan_pf['blockysize'] = 32
-        pan_pf['count'] = 1
-
-        ndvi_pf['dtype'] = rasterio.float32
-        ndvi_pf['height'] = total_height
-        ndvi_pf['width'] = total_width
-        ndvi_pf['blockxsize'] = 32
-        ndvi_pf['blockysize'] = 32
-        ndvi_pf['count'] = 1
-
-        pan_arr = pan_ds.read(1).astype(pan_pf['dtype'])
-        ndvi_arr = ndvi_ds.read(1).astype(ndvi_pf['dtype'])
-
-        (row, col) = get_row_col(n)
-        if np.mean(pan_arr)==0.0:
-            empty_count += 1
-            pan_arr = np.ones_like(pan_arr)*1000
-            # if row>70 and row<100 and col>70 and col<100:
-                # print(f'met zero: r{row}c{col}')
-
-        total_pan_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = pan_arr
-        total_ndvi_arr[row*map_size:(row+1)*map_size, col*map_size:(col+1)*map_size] = ndvi_arr
-
-    print("saving total map...")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    
-    print(f'met empty areas: {empty_count}')
-
-    with rstopen(pjoin(save_dir, "pan.tif"), 'w', **pan_pf) as dst:
-        dst.write(total_pan_arr, 1)
-        dst.close()
-
-    with rstopen(pjoin(save_dir, "ndvi.tif"), 'w', **ndvi_pf) as dst:
-        dst.write(total_ndvi_arr, 1)
-        dst.close()
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--tif_dir", type=str)
     parser.add_argument("--area_polygon_dir", type=str)
-    parser.add_argument("--area_range", type=str)
+    parser.add_argument("--area_range", type=str)  # choise: 'all', 'idx1-idx2', 'list'
+    parser.add_argument("--area_idx", nargs='+')
     parser.add_argument("--interm_png_dir", type=str)
     parser.add_argument("--sample_dir", type=str)
     parser.add_argument("--model_path", type=str)
@@ -700,7 +663,7 @@ if __name__ == '__main__':
     parser.add_argument("--merge_dir", type=str)
     parser.add_argument("--origin_tif", type=str)
     parser.add_argument("--split_unit", type=int)
-    parser.add_argument("--norm_mode", type=str, default="after_split")
+    parser.add_argument("--norm_mode", type=str, default="no_norm", choices=['on_sample','on_area','no_norm'])
     parser.add_argument("--merge_tif", action="store_true")
     args = parser.parse_args()
 
@@ -724,8 +687,8 @@ if __name__ == '__main__':
             tif_dir=args.tif_dir,
             area_polygon_dir=args.area_polygon_dir,
             area_range=args.area_range,
-            interm_png_dir=args.interm_png_dir,
-            norm_mode=args.norm_mode
+            area_idx=args.area_idx,
+            interm_png_dir=args.interm_png_dir
         )
 
     if args.task == "split_train":

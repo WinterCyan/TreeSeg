@@ -148,3 +148,6 @@ wandb/
 # train files
 checkpoints/
 *.pth
+
+# png files
+*.png

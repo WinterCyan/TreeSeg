@@ -88,6 +88,12 @@ class CarvanaDataset(BasicDataset):
         super().__init__(images_dir, masks_dir, scale, mask_suffix='_mask')
 
 
+# TODO: data augmentation
+"""
+    1. flip, left-right, up-down (+2)
+    2. rotation, +90, 180, -90 (+3)
+    3. flip + rotation, (+2)
+"""
 class TreeDataset(Dataset):
     def __init__(self, dataset_dir, img_type='.png', annotation_thr=0.02):
         # dataset_dir contains [pan, ndvi, boundary, annotation] imgs
