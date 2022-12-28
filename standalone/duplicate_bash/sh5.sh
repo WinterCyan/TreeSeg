@@ -12,5 +12,7 @@ python3 -W ignore ../split_infer_merge_pipeline.py \
     --task preprocess_train \
     --tif_dir $data_root/tif \
     --area_polygon_dir $data_root/shp \
-    --area_range 200-300 \
+    --area_range list \
+    --area_idx 6 10 11 26 \
     --interm_png_dir $data_root/interm_png
+

@@ -212,6 +212,7 @@ def findOverlap(img, areasWithPolygons, writePath, imageFilename, annotationFile
             profile['blockysize'] = 32
             profile['count'] = 1
             profile['dtype'] = rasterio.float32
+            profile['nodata'] = 0
             # writeExtractedImageAndAnnotation writes the image, annotation and boundaries and returns the counter of the next file to write. 
             writeCounter = writeExtractedImageAndAnnotation(img, sm, profile, polygonsInAreaDf, boundariesInAreaDf, writePath, imageFilename, annotationFilename, boundaryFilename, bands, writeCounter)
             overlapppedAreas.add(areaID)
@@ -247,7 +248,7 @@ def extractAreasThatOverlapWithTrainingData(inputImages, areasWithPolygons, writ
     if allAreas.difference(overlapppedAreas):
         print(f'Warning: Could not find a raw image correspoinding to {allAreas.difference(overlapppedAreas)} areas. Make sure that you have provided the correct paths!')
 
-def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_png_dir):
+def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, area_idx:list, interm_png_dir):
     """read tif, shp & split into training samples
 
     Args:
@@ -258,6 +259,9 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         split_unit: pixel size of sample
         norm_mode: norm image before/after split. Defaults to "no_norm".
     """
+
+    if area_range == 'list':
+        assert area_idx != None
 
     tif_dir = tif_dir.rstrip("/")
     area_polygon_dir = area_polygon_dir.rstrip("/")
@@ -298,34 +302,71 @@ def preprocess_training_samples(tif_dir, area_polygon_dir, area_range, interm_pn
         assert polygons.crs == areas.crs
 
         areas['id'] = range(areas.shape[0])
-        # ------------- for test -------------
-        if area_range != "all":
-            begin_idx = int(area_range.split("-")[0])
-            end_idx = int(area_range.split("-")[1])
-            assert begin_idx<=end_idx, "begin idx > end_idx!"
-            areas = areas[begin_idx:end_idx][:]
-        else:
-            begin_idx = 0
-        # ------------- for test -------------
-        areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
-        print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
-
         input_imgs = readInputImages(tif_dir, ".tif", "ndvi-", "pan-")
 
-        write_counter = begin_idx
-        extractAreasThatOverlapWithTrainingData(
-            inputImages=input_imgs,
-            areasWithPolygons=areas_with_polygons,
-            writePath=interm_png_dir, 
-            ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
-            panFilename=f"{pan_item.replace('.tif','')}",
-            annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
-            boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
-            bands=[0],
-            writeCounter=write_counter
-        )
 
-        print("matching polygon and annotation finished.")
+        # -----------process per area------------
+        idx_list = None
+        if area_range == "all":
+            idx_list = list(range(len(areas)))
+        elif area_range == "list":
+            idx_list = [int(i) for i in area_idx]
+        else:
+            begin_n = int(area_range.split("-")[0])
+            end_n = int(area_range.split("-")[1])
+            idx_list = list(range(begin_n, end_n))
+
+        for idx in idx_list:
+            print(f'processing area {idx}...')
+            slice_areas = areas.iloc[[idx],[0,1,2]]
+            areas_with_polygons = dividePolygonsInTrainingAreas(polygons, slice_areas)
+            print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
+            write_counter = idx
+            extractAreasThatOverlapWithTrainingData(
+                inputImages=input_imgs,
+                areasWithPolygons=areas_with_polygons,
+                writePath=interm_png_dir, 
+                ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
+                panFilename=f"{pan_item.replace('.tif','')}",
+                annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
+                boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
+                bands=[0],
+                writeCounter=write_counter
+            )
+
+            print("matching polygon and annotation finished.")
+        # ---------------------------------------
+
+        # if area_range == "all":
+        #     begin_idx = 0
+        # elif area_range == "list":
+        #     idx_list = [int(i) for i in area_idx]
+        #     print(f'idx_list: {idx_list}')
+        #     areas = areas.iloc[idx_list,[0,1,2]]
+        # else:
+        #     begin_idx = int(area_range.split("-")[0])
+        #     end_idx = int(area_range.split("-")[1])
+        #     assert begin_idx<=end_idx, "begin idx > end_idx!"
+        #     areas = areas[begin_idx:end_idx][:]
+
+        # areas_with_polygons = dividePolygonsInTrainingAreas(polygons, areas)
+        # print(f'assigned training polygons in {len(areas_with_polygons)} training areas and created weighted boundaries for ploygons')
+
+
+        # write_counter = begin_idx
+        # extractAreasThatOverlapWithTrainingData(
+        #     inputImages=input_imgs,
+        #     areasWithPolygons=areas_with_polygons,
+        #     writePath=interm_png_dir, 
+        #     ndviFilename=f"{pan_item.replace('pan','ndvi').replace('.tif','')}",
+        #     panFilename=f"{pan_item.replace('.tif','')}",
+        #     annotationFilename=f"{pan_item.replace('pan','annotation').replace('.tif','')}",
+        #     boundaryFilename=f"{pan_item.replace('pan','boundary').replace('.tif','')}",
+        #     bands=[0],
+        #     writeCounter=write_counter
+        # )
+
+        # print("matching polygon and annotation finished.")
 
 def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="no_norm"):
     # read extracted png dataset, [pan, ndvi, annotation, boundary]
@@ -612,7 +653,8 @@ if __name__ == '__main__':
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--tif_dir", type=str)
     parser.add_argument("--area_polygon_dir", type=str)
-    parser.add_argument("--area_range", type=str)
+    parser.add_argument("--area_range", type=str)  # choise: 'all', 'idx1-idx2', 'list'
+    parser.add_argument("--area_idx", nargs='+')
     parser.add_argument("--interm_png_dir", type=str)
     parser.add_argument("--sample_dir", type=str)
     parser.add_argument("--model_path", type=str)
@@ -621,7 +663,7 @@ if __name__ == '__main__':
     parser.add_argument("--merge_dir", type=str)
     parser.add_argument("--origin_tif", type=str)
     parser.add_argument("--split_unit", type=int)
-    parser.add_argument("--norm_mode", type=str, default="no_norm")
+    parser.add_argument("--norm_mode", type=str, default="no_norm", choices=['on_sample','on_area','no_norm'])
     parser.add_argument("--merge_tif", action="store_true")
     args = parser.parse_args()
 
@@ -645,6 +687,7 @@ if __name__ == '__main__':
             tif_dir=args.tif_dir,
             area_polygon_dir=args.area_polygon_dir,
             area_range=args.area_range,
+            area_idx=args.area_idx,
             interm_png_dir=args.interm_png_dir
         )
 

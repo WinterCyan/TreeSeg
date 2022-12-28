@@ -90,7 +90,7 @@ def train_net(
     global_step = 0
 
     log_freq_epoch = 3
-    save_freq_epoch = 1
+    save_freq_epoch = 20
     division_step = (n_train // (log_freq_epoch * batch_size))
     if division_step == 0:
         division_step = 1
