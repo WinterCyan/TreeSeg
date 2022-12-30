@@ -144,11 +144,11 @@ def train_net(
                         histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
                     eval_result = evaluate(net, val_loader, device, amp)
-                    dice_score = eval_result[dice_score]
-                    dice_loss = eval_result[dice_loss]
-                    sensitivity = eval_result[sensitivity]
-                    specificity = eval_result[specificity]
-                    accuracy = eval_result[accuracy]
+                    dice_score = eval_result['dice_score']
+                    dice_loss = eval_result['dice_loss']
+                    sensitivity = eval_result['sensitivity']
+                    specificity = eval_result['specificity']
+                    accuracy = eval_result['accuracy']
                     # scheduler.step(val_score)
 
                     log_img = torch.concat((pan_batch, ndvi_batch, annotation_batch.float(), direct_output.float()),dim=2)
