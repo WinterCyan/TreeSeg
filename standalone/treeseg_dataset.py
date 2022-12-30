@@ -1,7 +1,10 @@
 from torch.utils.data import DataLoader, Dataset
-
+from shutil import move as shmove
 import logging
+from random import shuffle
+import os
 from os import listdir
+from os import path
 from os.path import splitext
 from os.path import join as pjoin
 from pathlib import Path
@@ -12,6 +15,33 @@ from PIL.Image import open as Imgopen
 from torch.utils.data import Dataset
 import wandb
 from tqdm import tqdm
+
+
+def create_val_set(dataset_dir:str, set_len:int=1000, img_type=".png", thr=0.3):
+    val_dir = f'{dataset_dir}/val'
+    if os.path.exists(f'{val_dir}') and len(os.listdir(f'{val_dir}'))>0:
+        print('val dataset exists, exit.')
+        return
+    if not path.exists(val_dir):
+        os.makedirs(val_dir)
+    valid_names = []
+    suffix_names = [f.replace('pan', '') for f in listdir(dataset_dir) if f.startswith('pan-') and f.endswith(img_type)]
+    for n in suffix_names:
+        annotation_arr = np.asarray(Imgopen(pjoin(dataset_dir, f'annotation{n}')))
+        if np.mean(annotation_arr) >= thr:
+            valid_names.append(n)
+    print(f'valid count: {len(valid_names)}')
+    shuffle(valid_names)
+    valset_names = valid_names[:set_len]
+    types = ['pan','ndvi','annotation','boundary']
+    with open(f'{val_dir}/val_names.txt', 'w') as f:
+        for n in valset_names:
+            for t in types:
+                shmove(f'{dataset_dir}/{t}{n}', f'{val_dir}/{t}{n}')
+                f.write(f'{t}{n}\n')
+    f.close()
+    print(f'selected {set_len} samples to val set')
+    return valset_names
 
 
 class BasicDataset(Dataset):
@@ -95,7 +125,7 @@ class CarvanaDataset(BasicDataset):
     3. flip + rotation, (+2)
 """
 class TreeDataset(Dataset):
-    def __init__(self, dataset_dir, img_type='.png', annotation_thr=0.02):
+    def __init__(self, dataset_dir:str, img_type='.png', mean_filter=True, annotation_thr=0.02):
         # dataset_dir contains [pan, ndvi, boundary, annotation] imgs
         super(TreeDataset).__init__()
         self.dataset_shape = (256,256)
@@ -103,7 +133,14 @@ class TreeDataset(Dataset):
 
         self.dataset_dir = Path(dataset_dir)
         suffix_names = [f.replace('pan', '') for f in listdir(dataset_dir) if f.startswith('pan-') and f.endswith(img_type)]
-        self.valid_names = self.mean_filter_out(suffix_names)
+        self.valid_names = self.mean_filter_out(suffix_names) if mean_filter else suffix_names
+
+        if not (os.path.exists(f'{dataset_dir}/val') and len(os.listdir(f'{dataset_dir}/val'))>0):
+            if not dataset_dir.endswith('val'):
+                valset_names = create_val_set(dataset_dir)
+                for n in valset_names:
+                    self.valid_names.remove(n)
+                print('val dataset created.')
 
     def __len__(self):
         return len(self.valid_names)
@@ -150,33 +187,12 @@ class TreeDataset(Dataset):
         }
 
 if __name__ == '__main__':
-    wandb.init()
+    # wandb.init()
 
-    dir = "/home/lenovo/treeseg-dataset/full_process/temp"
+    dir = "/home/winter/code-resource/treeseg/trainingdata/trainsample_128_onsample"
     # dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
-    dataset = TreeDataset(dir)
-    print(len(dataset))
-    loader = DataLoader(dataset, shuffle=True, batch_size=4, num_workers=4, pin_memory=False)
-    for i,batch in enumerate(tqdm(loader)):
-        # print(f'pan min-max: {torch.min(batch["pan"])}, {torch.max(batch["pan"])}')
-        # print(f'ndvi min-max: {torch.min(batch["ndvi"])}, {torch.max(batch["ndvi"])}')
-        # print(f'anno unique: {np.unique(batch["annotation"])}')
-        # print(f'bound unique: {np.unique(batch["boundary"])}')
-
-        pan_batch = batch['pan']
-        ndvi_batch = batch['ndvi']
-        annotation_batch = batch['annotation']
-        boundary_batch = batch['boundary']
-        print(f'pan ndvi anno boundary | devices: {pan_batch.device},{ndvi_batch.device},{annotation_batch.device},{boundary_batch.device}')
-
-        log_img_pan = wandb.Image(batch['pan'], caption='pan')
-        log_img_ndvi = wandb.Image(batch['ndvi'], caption='ndvi')
-        log_img_annotation = wandb.Image(batch['annotation'], caption='annotation')
-        log_img_boundary = wandb.Image(batch['boundary'], caption='boundary')
-
-        wandb.log({
-            'pan': log_img_pan,
-            'ndvi': log_img_ndvi,
-            'annotation': log_img_annotation,
-            'boundary': log_img_boundary
-        })
+    # dataset = TreeDataset(dir, annotation_thr=0)
+    # print(len(dataset))
+    # loader = DataLoader(dataset, shuffle=True, batch_size=1, num_workers=4, pin_memory=False)
+    # print(len(loader))
+    create_val_set(dir, thr=0.3)

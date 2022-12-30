@@ -98,6 +98,10 @@ def dividePolygonsInTrainingAreas(trainingPolygon, trainingArea, print_polygon_n
                 allocated.append(j)
 
             # Order of bounds: minx miny maxx maxy
+        # if len(spTemp)>=0:
+        #     print(f'len: {len(spTemp)}')
+        #     continue
+        # else:
         boundary = calculateBoundaryWeight(spTemp, scale_polygon = 1.5, output_plot = False)
         splitPolygons[trainingArea.loc[i]['id']] = {'polygons':spTemp, 'boundaryWeight': boundary, 'bounds':list(trainingArea.bounds.loc[i]),}
         cpTrainingPolygon = cpTrainingPolygon.drop(allocated)
@@ -425,6 +429,8 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="no
 
         pan_img = pan_dataset.read(1).astype(pan_profile['dtype'])
         ndvi_img = ndvi_dataset.read(1).astype(ndvi_profile['dtype'])
+        # clip ndvi to [0,1]
+        ndvi_img = np.clip(ndvi_img, a_min=0.0, a_max=1.0)
         annotation_img = annotation_dataset.read(1).astype(annotation_profile['dtype'])
         boundary_img = boundary_dataset.read(1).astype(boundary_profile['dtype'])
         assert pan_img.shape == ndvi_img.shape == annotation_img.shape == boundary_img.shape
@@ -438,18 +444,20 @@ def split_training_samples(interm_png_dir, sample_dir, split_unit, norm_mode="no
             ndvi_img = image_normalize(ndvi_img)
 
         height, width = pan_img.shape
-        row_count = int(height/split_unit)
-        col_count = int(width/split_unit)
+        row_count = (int(height/split_unit)*2 - 1 )
+        col_count = (int(width/split_unit)*2 - 1)
+        half_unit = int(split_unit/2)
         for r in range(row_count):
             for c in range(col_count):
                 idx_str = f"r{r}c{c}"
-                pan_sample = pan_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                ndvi_sample = ndvi_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                pan_sample = pan_img[r*half_unit:(r+2)*half_unit, c*half_unit:(c+2)*half_unit]
+                ndvi_sample = ndvi_img[r*half_unit:(r+2)*half_unit, c*half_unit:(c+2)*half_unit]
                 if norm_mode=="on_sample":
                     pan_sample = image_normalize(pan_sample)
-                    ndvi_sample = image_normalize(ndvi_sample)
-                annotation_sample = annotation_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
-                boundary_sample = boundary_img[r*split_unit:(r+1)*split_unit, c*split_unit:(c+1)*split_unit]
+                    # ndvi_sample = image_normalize(ndvi_sample)
+                    ndvi_sample = ndvi_sample*2-1
+                annotation_sample = annotation_img[r*half_unit:(r+2)*half_unit, c*half_unit:(c+2)*half_unit]
+                boundary_sample = boundary_img[r*half_unit:(r+2)*half_unit, c*half_unit:(c+2)*half_unit]
                 with rstopen(f"{sample_dir}/{pan_item}-{idx_str}.png", 'w', **pan_profile) as dst:
                     dst.write(pan_sample, 1)
                     dst.close()
@@ -668,16 +676,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    if args.task == "split_inference":
-        assert args.tif_dir is not None, "please set tif_dir arg!"
-        assert args.sample_dir is not None, "please set sample_dir arg!"
-        split_inference_samples(
-                tif_dir=args.tif_dir,
-                sample_dir=args.sample_dir,
-                split_unit=args.split_unit,
-                norm_mode=args.norm_mode
-            )
-
     if args.task == "preprocess_train":
         assert args.tif_dir is not None, "please set tif_dir arg!"
         assert args.area_polygon_dir is not None, "please set area_polygon_dir arg!"
@@ -701,6 +699,16 @@ if __name__ == '__main__':
             split_unit=args.split_unit,
             norm_mode=args.norm_mode
         )
+
+    if args.task == "split_inference":
+        assert args.tif_dir is not None, "please set tif_dir arg!"
+        assert args.sample_dir is not None, "please set sample_dir arg!"
+        split_inference_samples(
+                tif_dir=args.tif_dir,
+                sample_dir=args.sample_dir,
+                split_unit=args.split_unit,
+                norm_mode=args.norm_mode
+            )
 
     if args.task == "inference":
         assert args.model_path is not None, "please set model_path arg!"

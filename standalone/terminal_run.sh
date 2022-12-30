@@ -19,13 +19,13 @@ data_root="/home/winter/code-resource/treeseg/trainingdata"
 proj_root="/home/winter/code/TreeSeg"
 
 # -------------------------- preprocess --------------------------
-python3 -W ignore split_infer_merge_pipeline.py \
-    --task preprocess_train \
-    --tif_dir $data_root/tif \
-    --area_polygon_dir $data_root/shp \
-    --area_range list \
-    --area_idx 17 \
-    --interm_png_dir $data_root/interm_png
+# python3 -W ignore split_infer_merge_pipeline.py \
+#     --task preprocess_train \
+#     --tif_dir $data_root/tif \
+#     --area_polygon_dir $data_root/shp \
+#     --area_range list \
+#     --area_idx 17 \
+#     --interm_png_dir $data_root/interm_png
 
 
 # -------------------------- split train --------------------------
@@ -46,22 +46,15 @@ python3 -W ignore split_infer_merge_pipeline.py \
 # python3 split_infer_merge_pipeline.py \
 #     --task split_train \
 #     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/trainsample_128_onarea \
+#     --sample_dir $data_root/trainsample_128_onsample \
 #     --split_unit 128 \
-#     --norm_mode on_area
-
-# python3 split_infer_merge_pipeline.py \
-#     --task split_train \
-#     --interm_png_dir $data_root/interm_png \
-#     --sample_dir $data_root/sample_108 \
-#     --split_unit 108 \
 #     --norm_mode on_sample
 
 # -------------------------- train --------------------------
-# python3 torch_train.py \
-#     --dataset_dir $data_root/trainsample_128_onsample \
-#     --model_dir $proj_root/checkpoints \
-#     --model_name onsample
+python3 torch_train.py \
+    --dataset_dir $data_root/trainsample_128_onsample \
+    --model_dir $proj_root/checkpoints \
+    --model_name on_sample
 
 # -------------------------- split inference --------------------------
 # python3 split_infer_merge_pipeline.py \

@@ -39,25 +39,21 @@ def train_net(
     dir_model = dir_model.rstrip('/')
 
     # 1. Create dataset
-    try:
-        # dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
-        dataset = TreeDataset(dir_dataset)
-    except (AssertionError, RuntimeError):
-        dataset = BasicDataset("", "", 0)
-    print(f"dataset len: {len(dataset)} [pan,ndvi,annotation,boundary] img pairs.")
-
-    # 2. Split into train / validation partitions
-    n_val = int(len(dataset) * val_percent)
-    n_train = len(dataset) - n_val
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    train_dataset = TreeDataset(dir_dataset, annotation_thr=0)
+    val_dataset = TreeDataset(f'{dir_dataset}/val', mean_filter=False)
+    n_train = len(train_dataset)
+    n_val = len(val_dataset)
+    print(f"train dataset len: {n_train} [pan,ndvi,annotation,boundary] img pairs.")
+    print(f"val dataset len: {n_val} [pan,ndvi,annotation,boundary] img pairs.")
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=8, pin_memory=True)
-    train_loader = DataLoader(train_set, shuffle=True, **loader_args)
-    val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
+    train_loader = DataLoader(train_dataset, shuffle=True, **loader_args)
+    val_loader = DataLoader(val_dataset, shuffle=False, drop_last=True, **loader_args)
+    print(f'train batch num: {len(train_loader)}')
 
     # (Initialize logging)
-    experiment = wandb.init(project='U-Net for TreeSeg', resume='allow', anonymous='must')
+    experiment = wandb.init(project='TreeSeg, norm on sample', resume='allow', anonymous='must')
     experiment.config.update(
         dict(
             epochs=epochs, 
@@ -82,8 +78,9 @@ def train_net(
     ''')
 
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
+    # optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
+    optimizer = optim.Adadelta(params=net.parameters(), lr=1.0, rho=0.95, eps=1e-6, weight_decay=0)
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     # criterion = nn.CrossEntropyLoss()
     criterion = WeightedTverskyLoss()
@@ -147,19 +144,30 @@ def train_net(
                         histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
                     eval_result = evaluate(net, val_loader, device, amp)
-                    val_score = eval_result['dice_score']
-                    scheduler.step(val_score)
+                    dice_score = eval_result[dice_score]
+                    dice_loss = eval_result[dice_loss]
+                    sensitivity = eval_result[sensitivity]
+                    specificity = eval_result[specificity]
+                    accuracy = eval_result[accuracy]
+                    # scheduler.step(val_score)
 
-                    logging.info('Validation Dice score: {}'.format(val_score))
+                    log_img = torch.concat((pan_batch, ndvi_batch, annotation_batch.float(), direct_output.float()),dim=2)
+
+                    logging.info(f'dice score: {dice_score}, dice loss: {dice_loss}, sensitivity: {sensitivity}, specificity: {specificity}, accuracy: {accuracy}')
                     experiment.log({
+                        'dice_score': dice_score,
+                        'dice_loss': dice_loss,
+                        'sensitivity': sensitivity,
+                        'specificity': specificity,
+                        'accuracy': accuracy,
                         'learning rate': optimizer.param_groups[0]['lr'],
-                        'validation Dice': val_score,
-                        'pan images': wandb.Image(pan_batch.cpu()),
-                        'ndvi images': wandb.Image(ndvi_batch.cpu()),
-                        'masks': {
-                            'true': wandb.Image(annotation_batch.float().cpu()),
-                            'pred': wandb.Image(direct_output.float().cpu()),
-                        },
+                        # 'pan images': wandb.Image(pan_batch.cpu()),
+                        # 'ndvi images': wandb.Image(ndvi_batch.cpu()),
+                        # 'masks': {
+                        #     'true': wandb.Image(annotation_batch.float().cpu()),
+                        #     'pred': wandb.Image(direct_output.float().cpu()),
+                        # },
+                        'input & output': wandb.Image(log_img.cpu()),
                         'step': global_step,
                         'epoch': epoch,
                         **histograms
@@ -180,7 +188,7 @@ def get_args():
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
-    parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
+    parser.add_argument('--validation', '-v', dest='val', type=float, default=5.0,
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
