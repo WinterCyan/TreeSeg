@@ -27,7 +27,8 @@ def train_net(
         device,
         dir_dataset:str,
         dir_model:str,
-        epochs: int = 5,
+        epochs: int = 50,
+        begin_epoch:int = 1,
         batch_size: int = 1,
         learning_rate: float = 1e-5,
         val_percent: float = 0.1,
@@ -93,7 +94,7 @@ def train_net(
         division_step = 1
 
     # 5. Begin training
-    for epoch in range(1, epochs+1):
+    for epoch in range(begin_epoch, epochs+1):
         net.train()
         epoch_loss = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
@@ -151,9 +152,7 @@ def train_net(
                     accuracy = eval_result['accuracy']
                     # scheduler.step(val_score)
 
-                    log_img = torch.concat((pan_batch, ndvi_batch, annotation_batch.float(), direct_output.float()),dim=2)
-
-                    logging.info(f'dice score: {dice_score}, dice loss: {dice_loss}, sensitivity: {sensitivity}, specificity: {specificity}, accuracy: {accuracy}')
+                    logging.info(f'dice score: {dice_score}, dice loss: {dice_loss}, sensitivity: {sensitivity}, specificity: {specificity}, lr: {learning_rate}')
                     experiment.log({
                         'dice_score': dice_score,
                         'dice_loss': dice_loss,
@@ -161,13 +160,12 @@ def train_net(
                         'specificity': specificity,
                         'accuracy': accuracy,
                         'learning rate': optimizer.param_groups[0]['lr'],
-                        # 'pan images': wandb.Image(pan_batch.cpu()),
-                        # 'ndvi images': wandb.Image(ndvi_batch.cpu()),
-                        # 'masks': {
-                        #     'true': wandb.Image(annotation_batch.float().cpu()),
-                        #     'pred': wandb.Image(direct_output.float().cpu()),
-                        # },
-                        'input & output': wandb.Image(log_img.cpu()),
+                        'pan images': wandb.Image(pan_batch.cpu()),
+                        'ndvi images': wandb.Image(ndvi_batch.cpu()),
+                        'masks': {
+                            'true': wandb.Image(annotation_batch.float().cpu()),
+                            'pred': wandb.Image(direct_output.float().cpu()),
+                        },
                         'step': global_step,
                         'epoch': epoch,
                         **histograms
@@ -187,6 +185,7 @@ def get_args():
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
+    parser.add_argument('--load_epoch', type=int, default=False, help='train loaded model from this epoch')
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
     parser.add_argument('--validation', '-v', dest='val', type=float, default=5.0,
                         help='Percent of the data that is used as validation (0-100)')
@@ -228,6 +227,7 @@ if __name__ == '__main__':
         train_net(
             net=net,
             epochs=args.epochs,
+            begin_epoch=args.load_epoch+1,
             dir_dataset=args.dataset_dir,
             dir_model=args.model_dir,
             batch_size=args.batch_size,

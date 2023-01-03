@@ -55,6 +55,8 @@ python3 torch_train.py \
     --dataset_dir $data_root/trainsample_128_onsample \
     --model_dir $proj_root/checkpoints \
     --model_name on_sample
+    # --load $proj_root/checkpoints/on_sample_checkpoint_epoch20.pth \
+    # --load_epoch 20
 
 # -------------------------- split inference --------------------------
 # python3 split_infer_merge_pipeline.py \
