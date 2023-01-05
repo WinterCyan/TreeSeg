@@ -40,7 +40,7 @@ def train_net(
     dir_model = dir_model.rstrip('/')
 
     # 1. Create dataset
-    train_dataset = TreeDataset(dir_dataset, annotation_thr=0)
+    train_dataset = TreeDataset(dir_dataset, annotation_thr=0.01)
     val_dataset = TreeDataset(f'{dir_dataset}/val', mean_filter=False)
     n_train = len(train_dataset)
     n_val = len(val_dataset)
@@ -152,6 +152,8 @@ def train_net(
                     accuracy = eval_result['accuracy']
                     # scheduler.step(val_score)
 
+                    sig_output = torch.sigmoid(direct_output)
+                    pred_mask = (sig_output>0.5).float()
                     logging.info(f'dice score: {dice_score}, dice loss: {dice_loss}, sensitivity: {sensitivity}, specificity: {specificity}, lr: {learning_rate}')
                     experiment.log({
                         'dice_score': dice_score,
@@ -165,6 +167,7 @@ def train_net(
                         'masks': {
                             'true': wandb.Image(annotation_batch.float().cpu()),
                             'pred': wandb.Image(direct_output.float().cpu()),
+                            'pred_mask': wandb.Image(pred_mask.cpu()),
                         },
                         'step': global_step,
                         'epoch': epoch,
@@ -174,7 +177,7 @@ def train_net(
         if save_checkpoint and epoch%save_freq_epoch==0:
             if not path.exists(dir_model):
                 os.makedirs(dir_model)
-            torch.save(net.state_dict(), f'{dir_model}/{model_name}_checkpoint_epoch{epoch}.pth')
+            torch.save(net.state_dict(), f'{dir_model}/{model_name}_epoch{epoch}.pth')
             logging.info(f'Checkpoint {epoch} saved!')
 
 

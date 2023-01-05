@@ -14,7 +14,8 @@
 
 # data_root="/home/lenovo/treeseg-dataset/full_process"
 # data_root="/home/lenovo/treeseg-dataset/inference_train_data"
-data_root="/home/winter/code-resource/treeseg/trainingdata"
+train_data_root="/home/winter/code-resource/treeseg/trainingdata"
+infer_data_root="/home/winter/code-resource/treeseg/inferdata"
 # data_root="/home/lenovo/treeseg-dataset/inference/all-views"
 proj_root="/home/winter/code/TreeSeg"
 
@@ -51,19 +52,19 @@ proj_root="/home/winter/code/TreeSeg"
 #     --norm_mode on_sample
 
 # -------------------------- train --------------------------
-python3 torch_train.py \
-    --dataset_dir $data_root/trainsample_128_onsample \
-    --model_dir $proj_root/checkpoints \
-    --model_name on_sample
-    # --load $proj_root/checkpoints/on_sample_checkpoint_epoch20.pth \
-    # --load_epoch 20
+# python3 torch_train.py \
+#     --dataset_dir $train_data_root/trainsample_128_onsample \
+#     --model_dir $proj_root/checkpoints \
+#     --model_name on_sample_thr001 \
+#     --load $proj_root/checkpoints/on_sample_thr001_epoch60.pth \
+#     --load_epoch 60
 
 # -------------------------- split inference --------------------------
 # python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
-#     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_256 \
-#     --split_unit 256
+#     --tif_dir $infer_data_root/tif \
+#     --sample_dir $infer_data_root/sample128 \
+#     --split_unit 128
 
 # python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
@@ -73,24 +74,23 @@ python3 torch_train.py \
 
 # python3 split_infer_merge_pipeline.py \
 #     --task split_inference \
-#     --tif_dir $data_root/tif \
-#     --sample_dir $data_root/inference_sample_128_beforenorm \
+#     --tif_dir $infer_data_root/tif \
+#     --sample_dir $infer_data_root/sample_128_onsample \
 #     --split_unit 128 \
-#     --norm_mode on_area
+#     --norm_mode on_sample
 
 # # -------------------------- inference --------------------------
-# python3 split_infer_merge_pipeline.py \
-#     --task inference \
-#     --model_path $proj_root/checkpoints/beforenorm.pth \
-#     --sample_dir $data_root/inference_sample_128_beforenorm \
-#     --result_dir $data_root/torch_result/inference_result_128_beforenorm
+python3 split_infer_merge_pipeline.py \
+    --task inference \
+    --model_path $proj_root/checkpoints/on_sample_thr001_epoch60.pth \
+    --sample_dir $infer_data_root/sample_128_onsample \
+    --result_dir $infer_data_root/result/128_onsample_thr001
 
 # # -------------------------- merge --------------------------
-# python3 split_infer_merge_pipeline.py \
-#     --task merge \
-#     --input_dir $data_root/inference_sample_128_beforenorm \
-#     --result_dir $data_root/torch_result/inference_result_128_beforenorm \
-#     --split_unit 128 \
-#     --merge_dir $data_root/torch_result/merge_result_128_beforenorm \
-#     --merge_tif \
-#     --origin_tif $data_root/tif/pan-0.tif
+python3 split_infer_merge_pipeline.py \
+    --task merge \
+    --input_dir $infer_data_root/sample_128_onsample \
+    --result_dir $infer_data_root/result/128_onsample_thr001 \
+    --split_unit 128 \
+    --merge_dir $infer_data_root/result/merge_128_onsample_thr001 \
+    --origin_tif_dir $infer_data_root/tif

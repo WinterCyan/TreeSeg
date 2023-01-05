@@ -134,6 +134,7 @@ class TreeDataset(Dataset):
         self.dataset_dir = Path(dataset_dir)
         suffix_names = [f.replace('pan', '') for f in listdir(dataset_dir) if f.startswith('pan-') and f.endswith(img_type)]
         self.valid_names = self.mean_filter_out(suffix_names) if mean_filter else suffix_names
+        print(f'total {len(suffix_names)} samples, get {len(self.valid_names)} samples after filtering with threshold {self.thr}')
 
         if not (os.path.exists(f'{dataset_dir}/val') and len(os.listdir(f'{dataset_dir}/val'))>0):
             if not dataset_dir.endswith('val'):
@@ -149,7 +150,7 @@ class TreeDataset(Dataset):
         valid_names = []
         for n in names:
             annotation_arr = np.asarray(Imgopen(pjoin(self.dataset_dir, f'annotation{n}')))
-            if np.mean(annotation_arr) >= self.thr:
+            if np.mean(annotation_arr) > self.thr:
                 valid_names.append(n)
         return valid_names
 
@@ -191,8 +192,8 @@ if __name__ == '__main__':
 
     dir = "/home/winter/code-resource/treeseg/trainingdata/trainsample_128_onsample"
     # dir = "/home/lenovo/treeseg-dataset/full_process/sample_128_nonorm"
-    # dataset = TreeDataset(dir, annotation_thr=0)
+    dataset = TreeDataset(dir, annotation_thr=0.01)
     # print(len(dataset))
     # loader = DataLoader(dataset, shuffle=True, batch_size=1, num_workers=4, pin_memory=False)
     # print(len(loader))
-    create_val_set(dir, thr=0.3)
+    # create_val_set(dir, thr=0.3)
